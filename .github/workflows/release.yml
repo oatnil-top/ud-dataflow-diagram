@@ -34,10 +34,16 @@ jobs:
     runs-on: ubuntu-latest     # ⛔ must be a GitHub-hosted runner; OIDC is not offered on self-hosted
     steps:
       - uses: actions/checkout@v4
+      # ⛔ Do NOT add `registry-url:` here. It makes setup-node write an .npmrc containing
+      # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}, and with no token supplied that
+      # expands to setup-node's literal placeholder. npm then authenticates with a junk token
+      # instead of exchanging the OIDC one, and the registry masks the rejection as
+      # `E404 Not Found - PUT ... could not be found or you do not have permission`, which
+      # reads like a misconfigured trusted publisher and is not. Provenance still gets signed
+      # first, so the log looks like OIDC worked right up until the PUT (run 33302251784).
       - uses: actions/setup-node@v4
         with:
           node-version: 22     # Trusted Publishing needs Node >= 22.14.0
-          registry-url: https://registry.npmjs.org
           cache: npm
       # Node 22 ships npm 10.x; Trusted Publishing landed in 11.5.1.
       - run: npm install -g npm@latest
