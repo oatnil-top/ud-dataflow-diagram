@@ -2,6 +2,15 @@ name: ci
 on:
   push: { branches: [main] }
   pull_request:
+  # `sabotage` exists so the consumer job below can be PROVEN to go red on demand. It only
+  # ever corrupts the throwaway tarball built inside a run; it cannot affect a publish.
+  workflow_dispatch:
+    inputs:
+      sabotage:
+        description: 'break the packed tarball on purpose, to prove the consumer job fails'
+        type: choice
+        default: none
+        options: [none, drop-dts, drop-dist, drop-styles]
 permissions: { contents: read }
 jobs:
   secrets:
@@ -25,3 +34,99 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build:playground
+
+  # Installs this package the way a stranger does, and typechecks + builds against it.
+  #
+  # WHY THIS EXISTS. ud-vite-app and playground/ both alias '@oatnil/ud-dataflow-diagram' at
+  # src/, so neither of them ever resolves package.json's main/types/exports — the fields an
+  # npm consumer depends on entirely. playground/ used to resolve by name and so accidentally
+  # covered this, which is how it caught `types` pointing at a gitignored dist/; aligning its
+  # tsconfig to src/ (correct on its own terms) removed the last check. Nothing else in this
+  # repo would notice a package that installs and does not work.
+  #
+  # It packs a tarball rather than installing from the registry, so it gates the change BEFORE
+  # a version number is spent — an npm version is permanent and cannot be re-used.
+  #
+  # ⛔ A job that has never failed proves nothing. Run this workflow manually with `sabotage`
+  # set to drop-dts / drop-dist / drop-styles and watch it go red; each option reproduces a
+  # real way this package has been, or could be, broken.
+  consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run build
+
+      # npm pack does NOT run prepublishOnly (only `npm publish` does), so dist/ is whatever
+      # the build above left — which is what makes the sabotage options below effective.
+      - name: sabotage the tarball (manual self-test only)
+        if: github.event_name == 'workflow_dispatch' && inputs.sabotage != 'none'
+        run: |
+          set -euo pipefail
+          case "${{ inputs.sabotage }}" in
+            drop-dts)    rm -f dist/index.d.ts ;;
+            drop-dist)   rm -rf dist ;;
+            drop-styles) node -e "const f='package.json',j=require('./'+f);delete j.exports['./styles'];require('fs').writeFileSync(f,JSON.stringify(j,null,2))" ;;
+          esac
+          echo "::warning::sabotage=${{ inputs.sabotage }} applied — this run is EXPECTED to fail"
+
+      - name: pack
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination /tmp
+          echo "TARBALL=$(ls /tmp/oatnil-ud-dataflow-diagram-*.tgz)" >> "$GITHUB_ENV"
+
+      - name: a clean Vite consumer typechecks and builds against the tarball
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/c/vite/src && cd /tmp/c/vite
+          echo '{"name":"c","private":true,"version":"0.0.0","type":"module"}' > package.json
+          printf "import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\nexport default defineConfig({ plugins: [react()] })\n" > vite.config.ts
+          echo '{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM"],"module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true,"skipLibCheck":true,"noEmit":true},"include":["src"]}' > tsconfig.json
+          echo '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>' > index.html
+          # exactly what the README Quick start tells a stranger to write
+          cat > src/main.tsx <<'TSX'
+          import { createRoot } from 'react-dom/client'
+          import { DataflowEditor } from '@oatnil/ud-dataflow-diagram'
+          import '@oatnil/ud-dataflow-diagram/styles'
+          createRoot(document.getElementById('root')!).render(
+            <DataflowEditor initialContent="" onSaveGraph={async () => {}} onClose={() => {}} />
+          )
+          TSX
+          npm i --silent "$TARBALL" react@19.2.0 react-dom@19.2.0 @xyflow/react@12.10.0 \
+            i18next@25.6.1 react-i18next@16.2.4 lucide-react@0.553.0 zustand@5.0.8
+          npm i --silent -D vite@7 @vitejs/plugin-react@5 typescript@5.9 @types/react@19.2.2 @types/react-dom@19.2.2
+          npx tsc --noEmit
+          npx vite build
+          css="$(ls dist/assets/*.css 2>/dev/null | head -1)"
+          [ -n "$css" ] || { echo "::error::no CSS emitted — the /styles import produced nothing"; exit 1; }
+          grep -q "dataflow-editor" "$css" || { echo "::error::stylesheet missing from the consumer's CSS"; exit 1; }
+          echo "vite consumer ok — $(wc -c <"$css") bytes of CSS"
+
+      - name: a clean Next consumer builds with no transpilePackages
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/c/next/app && cd /tmp/c/next
+          echo '{"name":"c","private":true,"version":"0.0.0"}' > package.json
+          echo 'export default {}' > next.config.mjs
+          echo '{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM"],"module":"ESNext","moduleResolution":"bundler","jsx":"preserve","strict":true,"skipLibCheck":true,"noEmit":true,"allowJs":true,"esModuleInterop":true,"incremental":true,"plugins":[{"name":"next"}]},"include":["app","next-env.d.ts"]}' > tsconfig.json
+          cat > app/layout.tsx <<'TSX'
+          export default function RootLayout({ children }: { children: React.ReactNode }) {
+            return <html><body>{children}</body></html>
+          }
+          TSX
+          cat > app/page.tsx <<'TSX'
+          'use client'
+          import { DataflowEditor } from '@oatnil/ud-dataflow-diagram'
+          import '@oatnil/ud-dataflow-diagram/styles'
+          export default function Page() {
+            return <DataflowEditor initialContent="" onSaveGraph={async () => {}} onClose={() => {}} />
+          }
+          TSX
+          npm i --silent next@15 react@19.2.0 react-dom@19.2.0 "$TARBALL" \
+            @xyflow/react@12.10.0 i18next@25.6.1 react-i18next@16.2.4 lucide-react@0.553.0 zustand@5.0.8
+          npm i --silent -D typescript@5.9 @types/react@19.2.2 @types/react-dom@19.2.2 @types/node
+          npx next build
+          echo "next consumer ok — built with no transpilePackages and no DOM.Iterable"
