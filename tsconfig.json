@@ -14,7 +14,17 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vitest/globals", "@testing-library/jest-dom"],
+    // In-repo code (playground/) imports this package BY NAME, the same way ud-vite-app and
+    // any npm consumer do. Without these paths tsc resolves that name through package.json
+    // "types", which now points at dist/ — a gitignored build output that does not exist in a
+    // fresh checkout, so `npm run typecheck` passed locally and failed in CI. Point tsc at the
+    // source instead, mirroring the alias in playground/vite.config.ts, so typechecking the
+    // sources never depends on having built the package first.
+    "paths": {
+      "@oatnil/ud-dataflow-diagram": ["./src/index.ts"],
+      "@oatnil/ud-dataflow-diagram/fixtures/*": ["./fixtures/*"]
+    }
   },
   "include": ["src", "fixtures", "playground"]
 }
