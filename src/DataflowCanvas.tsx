@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useMemo } from 'react'
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react'
 import {
   ReactFlow,
   Background,
@@ -8,6 +8,7 @@ import {
   ConnectionMode,
   ReactFlowProvider,
   useReactFlow,
+  useNodesInitialized,
   getNodesBounds,
   getViewportForBounds,
 } from '@xyflow/react'
@@ -664,6 +665,39 @@ function FlowWithCapture({
   onCanvasRefReady?: (ref: DataflowCanvasRef) => void
 }) {
   const { fitView, getNodes, setViewport } = useReactFlow()
+
+  /**
+   * Land on the whole diagram — once, after React Flow has measured the nodes.
+   *
+   * `fitView` on <ReactFlow> (line 476) is not enough on its own: it runs on the first
+   * render, when almost every node is still unmeasured, so it fits whichever nodes already
+   * carry a size. On the playground's 11-node sample that is the single `note` (the only
+   * one with an explicit `style.width`), and the editor opens at maxZoom on a corner —
+   * measured: zoom 4, 1 of 11 nodes in view, in ud and in the playground alike.
+   *
+   * `useNodesInitialized` is true once every node has real dimensions, which is the first
+   * moment a fit means anything. Two guards, and both are load-bearing:
+   *
+   * - `didFitOnLoad` — exactly once. Adding or resizing a node flips the hook again, and
+   *   re-fitting then would yank the canvas out from under whoever is drawing on it.
+   * - `openedWithNodes` — only for a diagram that arrived with content. On a NEW empty
+   *   diagram the hook stays false until the user drops their first node, and fitting then
+   *   would slam the canvas to maxZoom on that one node.
+   *
+   * `maxZoom: 1` says the landing never zooms IN past 100%, so a two-node diagram does not
+   * open blown up; zooming out to fit is unbounded (the canvas minZoom still applies). It
+   * is written out rather than left to the default because the two fit paths do not agree:
+   * measured, the Controls "fit view" button caps at 1 while the <ReactFlow fitView> prop
+   * went to the canvas's own maxZoom of 4 — which is how the broken landing got there.
+   */
+  const nodesInitialized = useNodesInitialized()
+  const openedWithNodes = useRef(store.getState().nodes.length > 0)
+  const didFitOnLoad = useRef(false)
+  useEffect(() => {
+    if (!nodesInitialized || didFitOnLoad.current || !openedWithNodes.current) return
+    didFitOnLoad.current = true
+    fitView({ padding: 0.15, maxZoom: 1 })
+  }, [nodesInitialized, fitView])
 
   // Provide capture helpers to parent
   useEffect(() => {
