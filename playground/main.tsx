@@ -37,9 +37,16 @@ function App() {
       <DataflowEditor
         initialContent={initial}
         onSaveGraph={async (g) => { localStorage.setItem(DOC_KEY, g) }}
-        // "Close" on a page with nowhere to go = back to the sample. The editor's own
-        // quit confirmation (DataflowEditor.tsx:44) still guards it.
-        onClose={() => { localStorage.removeItem(DOC_KEY); location.reload() }}
+        // Ctrl+S must not reach onClose on this page: closing here reloads, and the default
+        // save-and-close made the save key discard the visitor's view right after writing it.
+        saveShortcut="save"
+        // "Close" on a page with nowhere to go = drop unsaved edits and come back to the last
+        // saved diagram (a first visit comes back to the sample). ⛔ It must not delete what
+        // was saved: this used to `removeItem(DOC_KEY)`, which made every close — and, through
+        // save-and-close, every Ctrl+S — a silent wipe of the visitor's diagram. The cost of
+        // that fix is that "back to the pristine sample" is no longer reachable from the UI
+        // once you have saved; losing saved work is the worse of the two.
+        onClose={() => { location.reload() }}
       />
       <LandingCard />
       {status && (

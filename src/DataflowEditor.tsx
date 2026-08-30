@@ -37,6 +37,20 @@ interface DataflowEditorProps {
    */
   onSaveGraph: (graphJson: string) => Promise<void>;
   onClose: () => void;
+  /**
+   * What Ctrl/Cmd+S does. Default `'save-and-close'`.
+   *
+   * The editor cannot know what closing costs — `onClose` is the host's function. Where
+   * closing is a cheap navigation and the graph lives elsewhere (ud: leaving the editor
+   * page, the row stays on the server) bundling it into the save key is right. Where it is
+   * not, the muscle-memory key inherits whatever the host's close does: the playground's
+   * page has nowhere to go, so its close reloads, and Ctrl+S there meant "write the diagram,
+   * then throw it away". Save must not lose data down any path, so a host whose close is
+   * not free passes `'save'` and gets save-only on the shortcut.
+   *
+   * Both toolbar buttons are unaffected either way — Save and Save & Close stay.
+   */
+  saveShortcut?: 'save' | 'save-and-close';
 }
 
 /**
@@ -46,7 +60,7 @@ interface DataflowEditorProps {
  * about the surrounding application's chrome. Whatever it needs from the app it asks for
  * through host.ts.
  */
-export default function DataflowEditor({ initialContent, diagram, onSaveGraph, onClose }: DataflowEditorProps) {
+export default function DataflowEditor({ initialContent, diagram, onSaveGraph, onClose, saveShortcut = 'save-and-close' }: DataflowEditorProps) {
   const { t } = useTranslation();
   const notify = useNotify();
   const [saving, setSaving] = useState(false);
@@ -99,17 +113,18 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
   const handleSaveOnly = useCallback(() => handleSave(false), [handleSave]);
   const handleSaveAndExit = useCallback(() => handleSave(true), [handleSave]);
 
-  // Ctrl+S → save & close
+  // Ctrl+S → save, and close as well unless the host said its close is not free (saveShortcut)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        handleSaveAndExit();
+        if (saveShortcut === 'save') handleSaveOnly();
+        else handleSaveAndExit();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSaveAndExit]);
+  }, [handleSaveAndExit, handleSaveOnly, saveShortcut]);
 
   // Warn on browser tab/window close if dirty
   useEffect(() => {
