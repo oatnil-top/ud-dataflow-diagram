@@ -60,6 +60,15 @@ Anthropic endpoints are called with the header Anthropic requires for browser us
 
 The graph is JSON: `nodes[]` whose `type` is one of `json`, `process`, `note`, `resource`, `group`, `icon`, `shape`, and `pipes[]` of type `dataflow` (`edges` is accepted as an alias when reading). The prompt behind **Copy prompt** (`src/utils/graphToPrompt.ts`) is the reference for what an agent should write. JSON nodes carry `fields[]`, and a pipe may connect two fields — that is the "dataflow" in the name. `${a.b}` in process templates is string substitution, not evaluation (`src/utils/templateEval.ts`).
 
+## Releasing
+
+Bump `version` in `package.json`, then push a matching `v*` tag — `.github/workflows/release.yml`
+publishes it to npm through Trusted Publishing (OIDC), with provenance and no stored token.
+
+⛔ Do not tag `v0.1.0`. It was published by hand before that workflow existed and has no tag;
+adding one makes the workflow try to republish a version npm already has, and the run fails at
+the publish step. The first tag the workflow handles is `v0.1.1`.
+
 ## Contributing
 
 Issues are open. Pull requests are not accepted in this first release — see [CONTRIBUTING.md](CONTRIBUTING.md).

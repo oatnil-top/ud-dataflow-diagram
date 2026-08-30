@@ -1,6 +1,6 @@
 {
   "name": "@oatnil/ud-dataflow-diagram",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The dataflow diagram editor from UnDercontrol — a React component library.",
   "license": "MIT",
   "repository": {

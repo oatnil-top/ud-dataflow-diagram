@@ -14,6 +14,12 @@
 # The tag is the trigger and package.json is the source of truth; the check below fails the
 # run when they disagree, because an npm version number is permanent — publishing the wrong
 # one cannot be undone, only superseded.
+#
+# ⛔ NEVER TAG v0.1.0. That version was published by hand before this workflow existed, so
+# there is no tag for it and it is tempting to "tidy up" by adding one. Doing so starts this
+# workflow, which tries to publish a version the registry already has, and the run dies at
+# `npm publish` — after the build, for no reason anyone will remember three days later.
+# The first version this workflow publishes is v0.1.1.
 name: release
 on:
   push:
