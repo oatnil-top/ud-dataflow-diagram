@@ -10,7 +10,7 @@ on:
         description: 'break the packed tarball on purpose, to prove the consumer job fails'
         type: choice
         default: none
-        options: [none, drop-dts, drop-dist, drop-styles]
+        options: [none, drop-dts, drop-dist, drop-styles, break-readme]
 permissions: { contents: read }
 jobs:
   secrets:
@@ -69,6 +69,7 @@ jobs:
             drop-dts)    rm -f dist/index.d.ts ;;
             drop-dist)   rm -rf dist ;;
             drop-styles) node -e "const f='package.json',j=require('./'+f);delete j.exports['./styles'];require('fs').writeFileSync(f,JSON.stringify(j,null,2))" ;;
+            break-readme) node -e "const f='README.md',fs=require('fs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/^import '@oatnil\\/ud-dataflow-diagram\\/styles'.*$/m,''))" ;;
           esac
           echo "::warning::sabotage=${{ inputs.sabotage }} applied — this run is EXPECTED to fail"
 
@@ -86,15 +87,25 @@ jobs:
           printf "import { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\nexport default defineConfig({ plugins: [react()] })\n" > vite.config.ts
           echo '{"compilerOptions":{"target":"ES2022","lib":["ES2022","DOM"],"module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true,"skipLibCheck":true,"noEmit":true},"include":["src"]}' > tsconfig.json
           echo '<!doctype html><html><body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>' > index.html
-          # exactly what the README Quick start tells a stranger to write
-          cat > src/main.tsx <<'TSX'
-          import { createRoot } from 'react-dom/client'
-          import { DataflowEditor } from '@oatnil/ud-dataflow-diagram'
-          import '@oatnil/ud-dataflow-diagram/styles'
-          createRoot(document.getElementById('root')!).render(
-            <DataflowEditor initialContent="" onSaveGraph={async () => {}} onClose={() => {}} />
-          )
-          TSX
+          # ⛔ The imports are LIFTED OUT OF README.md, not copied. That README line is
+          # load-bearing — a consumer who omits the /styles import gets a green build and an
+          # unstyled editor, so nothing else would notice it going missing. Taking the imports
+          # from the document means breaking the document breaks this job.
+          # Only the import lines: the rest of that block is illustrative and does not compile
+          # on its own (it references i18n/json/save/back and puts JSX outside a component).
+          node -e "
+            const fs=require('fs');
+            const sec=fs.readFileSync('$GITHUB_WORKSPACE/README.md','utf8').split('## Use it in your app')[1] || '';
+            const m=sec.match(/\`\`\`tsx\n([\s\S]*?)\`\`\`/);
+            if(!m){ console.error('::error::no tsx code block under \'Use it in your app\' in README.md'); process.exit(1) }
+            const imports=m[1].split('\n').filter(l=>l.startsWith('import '));
+            if(imports.length<2){ console.error('::error::README Quick start has '+imports.length+' import line(s); expected at least 2'); process.exit(1) }
+            fs.writeFileSync('src/main.tsx', imports.join('\n')+'\n'+
+              \"import { createRoot } from 'react-dom/client'\n\"+
+              'createRoot(document.getElementById(\'root\')!).render(\n'+
+              '  <DataflowEditor initialContent=\"\" onSaveGraph={async () => {}} onClose={() => {}} />\n)\n');
+          "
+          echo '--- src/main.tsx, built from README.md ---'; cat src/main.tsx
           npm i --silent "$TARBALL" react@19.2.0 react-dom@19.2.0 @xyflow/react@12.10.0 \
             i18next@25.6.1 react-i18next@16.2.4 lucide-react@0.553.0 zustand@5.0.8
           npm i --silent -D vite@7 @vitejs/plugin-react@5 typescript@5.9 @types/react@19.2.2 @types/react-dom@19.2.2
