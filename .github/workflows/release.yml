@@ -1,0 +1,92 @@
+# Publishes @oatnil/ud-dataflow-diagram to npm from a tag, with NO npm token in this repo.
+#
+# WHY OIDC AND NOT A SECRET. `gh secret list` on this repo is empty and that is a property
+# worth keeping: a long-lived npm credential able to publish the @oatnil scope, sitting in a
+# PUBLIC repo, is a much larger blast radius than this package. npm Trusted Publishing mints
+# a short-lived token from the `id-token` below instead, so there is nothing here to leak or
+# rotate. It is configured per-package at npmjs.com/package/<name>/access.
+#
+# ⛔ THE FIRST VERSION CANNOT COME FROM HERE. A trusted publisher can only be configured on a
+# package that already exists, so 0.1.0 was published by hand from a maintainer's machine and
+# that one version has no provenance. Every version from 0.1.1 on is published by this
+# workflow and does. See npm/cli#8544 — this is npm's bootstrap gap, not a local mistake.
+#
+# The tag is the trigger and package.json is the source of truth; the check below fails the
+# run when they disagree, because an npm version number is permanent — publishing the wrong
+# one cannot be undone, only superseded.
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write        # required: this is what Trusted Publishing exchanges for a token
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest     # ⛔ must be a GitHub-hosted runner; OIDC is not offered on self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22     # Trusted Publishing needs Node >= 22.14.0
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      # Node 22 ships npm 10.x; Trusted Publishing landed in 11.5.1.
+      - run: npm install -g npm@latest
+      - run: npm --version
+
+      - name: tag must equal package.json version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          echo "tag=$tag package.json=$pkg"
+          # Assert both sides are non-empty BEFORE comparing them. A check whose two inputs
+          # can both go missing passes vacuously, which is the failure shape this gate exists
+          # to prevent: green, and it compared nothing.
+          [ -n "$tag" ] || { echo "::error::tag is empty"; exit 1; }
+          [ -n "$pkg" ] || { echo "::error::could not read version from package.json"; exit 1; }
+          [ "$tag" = "$pkg" ] || { echo "::error::tag $tag != package.json $pkg"; exit 1; }
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # dist/ is gitignored, so it does not exist in this checkout. prepublishOnly rebuilds it
+      # during `npm publish` too; building here means a broken build fails BEFORE the
+      # irreversible step rather than during it.
+      - run: npm run build
+
+      - run: npm publish --provenance
+
+      # ⛔ A green publish step is NOT evidence the version is on the registry. Read it back.
+      # Everything below asserts non-empty first, so a failed/empty `npm view` fails the run
+      # instead of comparing two blanks and passing.
+      - name: prove it actually published
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg_name="$(node -p "require('./package.json').name")"
+
+          # the registry can lag a few seconds behind a successful PUT
+          for i in 1 2 3 4 5 6; do
+            got="$(npm view "$pkg_name@$tag" version 2>/dev/null || true)"
+            [ -n "$got" ] && break
+            echo "not visible yet (attempt $i) — waiting"; sleep 5
+          done
+
+          [ -n "$got" ] || { echo "::error::$pkg_name@$tag is not on the registry after publish"; exit 1; }
+          [ "$got" = "$tag" ] || { echo "::error::registry returned $got, expected $tag"; exit 1; }
+
+          latest="$(npm view "$pkg_name" dist-tags.latest 2>/dev/null || true)"
+          [ -n "$latest" ] || { echo "::error::could not read dist-tags.latest"; exit 1; }
+          [ "$latest" = "$tag" ] || { echo "::error::dist-tags.latest is $latest, expected $tag"; exit 1; }
+
+          # provenance is the reason this workflow exists rather than a laptop; if it is
+          # missing the publish silently degraded to an ordinary one.
+          att="$(npm view "$pkg_name@$tag" dist.attestations.url 2>/dev/null || true)"
+          [ -n "$att" ] || { echo "::error::no provenance attestation on $pkg_name@$tag"; exit 1; }
+
+          echo "verified on registry: $pkg_name@$got (latest=$latest)"
+          echo "provenance: $att"
