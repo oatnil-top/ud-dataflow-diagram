@@ -88,33 +88,62 @@ jobs:
 
       - run: npm publish --provenance
 
-      # ⛔ A green publish step is NOT evidence the version is on the registry. Read it back.
-      # Everything below asserts non-empty first, so a failed/empty `npm view` fails the run
-      # instead of comparing two blanks and passing.
+      # ⛔ A green publish step is NOT evidence the version is on the registry — and since npm
+      # went asynchronous those are genuinely two different things. `npm publish` now ends with
+      # "Your package is being processed and may take a few minutes to become available", so
+      # acceptance and visibility are separated in time. This step measures VISIBILITY.
+      #
+      # It distinguishes two outcomes that must never be collapsed into one red:
+      #   NOT-YET-VISIBLE  — accepted, still processing. The version number is ALREADY SPENT.
+      #   WRONG-CONTENT    — visible, but something does not match.
+      # The first is not a failed publish and must not be retried; republishing that version
+      # only fails again with "version already exists", which reads like worse breakage.
       - name: prove it actually published
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
           pkg_name="$(node -p "require('./package.json').name")"
 
-          # the registry can lag a few seconds behind a successful PUT
-          for i in 1 2 3 4 5 6; do
+          # Budget: 10 minutes. npm says "a few minutes"; this is deliberately generous because
+          # the cost of waiting is a slow run, and the cost of giving up early is a human
+          # concluding the publish failed when it did not.
+          deadline=$(( SECONDS + 600 ))
+          got=""
+          while [ $SECONDS -lt $deadline ]; do
             got="$(npm view "$pkg_name@$tag" version 2>/dev/null || true)"
             [ -n "$got" ] && break
-            echo "not visible yet (attempt $i) — waiting"; sleep 5
+            echo "not visible yet (${SECONDS}s elapsed of 600) — waiting"
+            sleep 15
           done
 
-          [ -n "$got" ] || { echo "::error::$pkg_name@$tag is not on the registry after publish"; exit 1; }
-          [ "$got" = "$tag" ] || { echo "::error::registry returned $got, expected $tag"; exit 1; }
+          if [ -z "$got" ]; then
+            echo "::error::NOT-YET-VISIBLE: $pkg_name@$tag did not appear on the registry within 600s."
+            echo "::error::npm ACCEPTED the publish — this is not a failed publish, and the version number is already spent."
+            echo "::error::⛔ Do NOT republish $tag, and do NOT re-run this job — the job would run npm publish again,"
+            echo "::error::   which fails with 'version already exists' and looks like worse breakage than the truth."
+            echo "::error::   Instead wait, then confirm by hand:  npm view $pkg_name@$tag version dist-tags.latest dist.attestations.url"
+            exit 1
+          fi
+
+          # From here the package is visible, so anything below is WRONG-CONTENT, a different
+          # failure with a different remedy.
+          fail_content() { echo "::error::WRONG-CONTENT: $*"; exit 2; }
+
+          [ "$got" = "$tag" ] || fail_content "registry returned version '$got', expected '$tag'"
 
           latest="$(npm view "$pkg_name" dist-tags.latest 2>/dev/null || true)"
-          [ -n "$latest" ] || { echo "::error::could not read dist-tags.latest"; exit 1; }
-          [ "$latest" = "$tag" ] || { echo "::error::dist-tags.latest is $latest, expected $tag"; exit 1; }
+          [ -n "$latest" ] || fail_content "could not read dist-tags.latest"
+          [ "$latest" = "$tag" ] || fail_content "dist-tags.latest is '$latest', expected '$tag'"
 
-          # provenance is the reason this workflow exists rather than a laptop; if it is
-          # missing the publish silently degraded to an ordinary one.
+          # provenance is the reason this workflow exists rather than a laptop; without it the
+          # publish silently degraded to an ordinary one.
           att="$(npm view "$pkg_name@$tag" dist.attestations.url 2>/dev/null || true)"
-          [ -n "$att" ] || { echo "::error::no provenance attestation on $pkg_name@$tag"; exit 1; }
+          [ -n "$att" ] || fail_content "no provenance attestation on $pkg_name@$tag"
 
-          echo "verified on registry: $pkg_name@$got (latest=$latest)"
+          # Reported, not gated: a legitimate change to `files` moves this number, so pinning it
+          # to a constant would fail honest releases. A human reading the log can still spot a
+          # tarball that suddenly halved.
+          files="$(npm view "$pkg_name@$tag" dist.fileCount 2>/dev/null || true)"
+
+          echo "verified on registry: $pkg_name@$got (latest=$latest, fileCount=${files:-unknown})"
           echo "provenance: $att"
