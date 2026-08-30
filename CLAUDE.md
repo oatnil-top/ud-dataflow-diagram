@@ -5,7 +5,7 @@ Run once per clone before anything else: `git config core.hooksPath .githooks` �
 The diagram editor from UnDercontrol, published under MIT. UnDercontrol itself is proprietary — describe *this repository* as open source, never the product.
 
 ## Never in this repo
-`.env*`, `.dev.vars`, `.wrangler/`, `*.pem`, `*.key`, any API key or token (provider, Cloudflare, GitHub, R2), Cloudflare account ids, `tmp/`, `.claude/settings.local.json`, and **any data from a UnDercontrol production instance** — including the owner's own diagrams (`acfa19b9`, `78e35e70`). Fixtures and sample diagrams are fabricated, always. Scanners do not catch content-level secrets; this rule does.
+`.env*`, `.dev.vars`, `.wrangler/`, `*.pem`, `*.key`, any API key or token (provider, Cloudflare, GitHub, R2), Cloudflare account ids, `tmp/`, `.claude/settings.local.json`, and **any data from a UnDercontrol production instance** — including the owner's own diagrams (`acfa19b9`, `78e35e70`). Fixtures and sample diagrams are fabricated, always. Scanners do not catch content-level secrets; this rule does. Analytics or tracking scripts of any kind — README §Your key promises a page that talks only to the visitor's provider.
 
 ## If a secret reaches this public repository
 **Treat it as already leaked.** Deleting the commit or force-pushing does not un-leak it: GitHub keeps the object reachable and crawlers pull public pushes within seconds. In order: (1) **rotate the credential now** at its provider — the only step that actually closes the exposure; (2) then purge it from history and force-push; (3) record what leaked, when, and the rotation in a task on the UD board. Never skip (1) because (2) "looks clean".
@@ -13,6 +13,7 @@ The diagram editor from UnDercontrol, published under MIT. UnDercontrol itself i
 ## Gates
 - `.githooks/pre-push` runs gitleaks over the commits about to be pushed and refuses on a finding. CI runs gitleaks too, but by then the push is public — CI is discovery, the hook is the gate.
 - Every shipped sample/example is opened by the package and every `node.type` must be a key of `registry.nodeTypes` (an unknown type renders as a blank box with no error). The playground's landing sample is checked the same way before each release of the playground.
+- `main` is the production branch of Workers Builds: every push to it is live at https://ud-dataflow-diagram.lintao-amons.workers.dev within minutes, with no human step in between. Run `npm test && npm run build:playground` before pushing; the pre-push hook only checks for secrets, not for a broken build.
 
 ### What this gate is actually proven against
 It has been exercised end-to-end against **one** rule: `anthropic-api-key`. A push carrying a
@@ -20,9 +21,7 @@ fabricated `sk-ant-` key was refused, the same push passed once the key was remo
 key-bearing push passed again with the hook disabled — so the refusal is demonstrably the hook's
 doing. **OpenAI keys, GitHub tokens, Cloudflare and R2 credentials are not verified here.** They
 are covered by gitleaks' default rule set on paper only; nobody has watched this gate stop one.
-Know which of those you are relying on before you push. (CI-side scanning is likewise not wired
-up yet — the bullet above describes the intent. Today the pre-push hook is the only gate that
-exists.)
+Know which of those you are relying on before you push.
 
 ### Writing a fake key to test the gate
 gitleaks' default rules match on **prefix, exact length and trailing literal — not entropy**. The
