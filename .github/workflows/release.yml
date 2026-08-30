@@ -34,17 +34,33 @@ jobs:
     runs-on: ubuntu-latest     # ⛔ must be a GitHub-hosted runner; OIDC is not offered on self-hosted
     steps:
       - uses: actions/checkout@v4
-      # ⛔ Do NOT add `registry-url:` here. It makes setup-node write an .npmrc containing
-      # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}, and with no token supplied that
-      # expands to setup-node's literal placeholder. npm then authenticates with a junk token
-      # instead of exchanging the OIDC one, and the registry masks the rejection as
-      # `E404 Not Found - PUT ... could not be found or you do not have permission`, which
-      # reads like a misconfigured trusted publisher and is not. Provenance still gets signed
-      # first, so the log looks like OIDC worked right up until the PUT (run 33302251784).
+      # `registry-url` is REQUIRED for OIDC to trigger — dropping it does not help. Measured,
+      # both ways, on this repo:
+      #   with registry-url    → run 33302251784: E404 on PUT. setup-node writes an .npmrc with
+      #                          //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}; no token is
+      #                          supplied here, so it expands to setup-node's literal
+      #                          XXXXX-XXXXX-XXXXX-XXXXX placeholder and npm authenticates with
+      #                          junk instead of exchanging the OIDC token. The registry masks
+      #                          that rejection as 404, which reads like a bad trusted publisher.
+      #   without registry-url → run 33302342229: ENEEDAUTH. No .npmrc at all (NPM_CONFIG_USERCONFIG
+      #                          unset), and npm still never attempts the exchange.
+      # So: keep registry-url for the `registry=` line, then delete the auth line it also writes.
+      # Known upstream: actions/setup-node#1551, npm/documentation#1960.
       - uses: actions/setup-node@v4
         with:
           node-version: 22     # Trusted Publishing needs Node >= 22.14.0
+          registry-url: https://registry.npmjs.org
           cache: npm
+
+      - name: drop the placeholder auth line so npm falls through to OIDC
+        run: |
+          set -euo pipefail
+          rc="${NPM_CONFIG_USERCONFIG:?setup-node did not write an .npmrc}"
+          sed -i '/_authToken/d' "$rc"
+          # assert the removal, rather than trusting sed to have matched
+          if grep -q "_authToken" "$rc"; then echo "::error::_authToken still present in $rc"; exit 1; fi
+          echo "auth line removed; registry line still present:"
+          grep -c "registry=" "$rc"
       # Node 22 ships npm 10.x; Trusted Publishing landed in 11.5.1.
       - run: npm install -g npm@latest
       - run: npm --version
