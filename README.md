@@ -16,10 +16,15 @@ This editor is the diagram feature of [UnDercontrol](https://oatnil.com/?ref=git
 
 ## Use it in your app
 
-Not on npm yet. Until then, add the repository as a git dependency or vendor `src/`. Peer dependencies: `react` 19, `react-dom` 19, `@xyflow/react` 12, `zustand` 5, `i18next`, `react-i18next`, `lucide-react`.
+```sh
+npm i @oatnil/ud-dataflow-diagram
+```
+
+Peer dependencies you install yourself: `react` 19, `react-dom` 19, `@xyflow/react` 12, `zustand` 5, `i18next`, `react-i18next`, `lucide-react`.
 
 ```tsx
 import { DataflowEditor, DataflowHostContext, registerDataflowMessages } from '@oatnil/ud-dataflow-diagram'
+import '@oatnil/ud-dataflow-diagram/styles'   // required — see the note below
 
 registerDataflowMessages(i18n)            // adds the editor's en/zh strings to your i18next instance
 
@@ -28,7 +33,18 @@ registerDataflowMessages(i18n)            // adds the editor's en/zh strings to 
 </DataflowHostContext.Provider>
 ```
 
-Styling is Tailwind v4: the host's CSS must `@source` this package's `src/` and define the `--background` / `--foreground` / `--primary` … variables (see `playground/index.css` for the full set).
+⚠️ **Leaving out the `/styles` import does not error.** The build stays green and the
+editor renders unstyled, which is easy to mistake for a broken component. The published
+build extracts the stylesheet out of the JavaScript, so nothing can import it for you.
+
+Styling is Tailwind v4 on top of that stylesheet: the host's CSS must `@source` the
+installed package and define the `--background` / `--foreground` / `--primary` … variables
+(see `playground/index.css` for the full set).
+
+```css
+@import "tailwindcss";
+@source "../node_modules/@oatnil/ud-dataflow-diagram/src";
+```
 
 ## Your key
 
