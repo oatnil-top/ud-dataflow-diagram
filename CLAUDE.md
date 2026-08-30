@@ -13,3 +13,34 @@ The diagram editor from UnDercontrol, published under MIT. UnDercontrol itself i
 ## Gates
 - `.githooks/pre-push` runs gitleaks over the commits about to be pushed and refuses on a finding. CI runs gitleaks too, but by then the push is public — CI is discovery, the hook is the gate.
 - Every shipped sample/example is opened by the package and every `node.type` must be a key of `registry.nodeTypes` (an unknown type renders as a blank box with no error). The playground's landing sample is checked the same way before each release of the playground.
+
+### What this gate is actually proven against
+It has been exercised end-to-end against **one** rule: `anthropic-api-key`. A push carrying a
+fabricated `sk-ant-` key was refused, the same push passed once the key was removed, and the same
+key-bearing push passed again with the hook disabled — so the refusal is demonstrably the hook's
+doing. **OpenAI keys, GitHub tokens, Cloudflare and R2 credentials are not verified here.** They
+are covered by gitleaks' default rule set on paper only; nobody has watched this gate stop one.
+Know which of those you are relying on before you push. (CI-side scanning is likewise not wired
+up yet — the bullet above describes the intent. Today the pre-push hook is the only gate that
+exists.)
+
+### Writing a fake key to test the gate
+gitleaks' default rules match on **prefix, exact length and trailing literal — not entropy**. The
+`anthropic-api-key` rule in 8.30.1 is:
+
+    \b(sk-ant-api03-[a-zA-Z0-9_\-]{93}AA)(?:[\x60'"\s;]|\\[nr]|$)
+
+— 93 characters and a literal `AA`. A shorter fabricated key is not matched **no matter how random
+it looks**; a high-entropy 60-char and a high-entropy 95-char variant were both measured as `no
+leaks found`. The gate then goes **green on your fake key**, and that green only means "this
+particular string is not caught" — which is trivially true and says nothing about whether a real
+key would be caught.
+
+So: **confirm your fixture is detected on its own before you use it to test the hook** —
+`gitleaks dir --no-banner --redact --exit-code 1 -c .gitleaks.toml <file>` must report
+`leaks found: 1`. A bad fixture is how a working gate gets declared useless and switched off.
+
+The gate can also fail the other way, closed: if it refuses a push with `FTL Failed to load config`
+instead of a `leaks found:` line, gitleaks never scanned and **every** push is being refused,
+including clean ones. Read the output, not just the exit code — a broken gate and a real catch
+both exit non-zero. A clean push that is also refused is the tell.
