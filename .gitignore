@@ -1,0 +1,13 @@
+# secrets & local state — see CLAUDE.md "Never in this repo"
+.env
+.env.*
+.dev.vars
+.wrangler/
+*.pem
+*.key
+.claude/settings.local.json
+tmp/
+# build
+node_modules/
+dist/
+playground/dist/

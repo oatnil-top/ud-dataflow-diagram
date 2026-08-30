@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+# No path-level allowlist, on purpose: a fabricated sample key in docs or tests must be
+# marked inline at its own line with `gitleaks:allow`, so every exemption stays visible
+# and line-scoped. Do not add an [[allowlists]] block with `paths` here.
+#
+# (gitleaks 8.30.1 rejects an [[allowlists]] block that carries no check — commits, paths,
+# regexes or stopwords — with "Failed to load config", which makes the pre-push hook refuse
+# every push instead of scanning. An empty allowlist allowed nothing anyway, so this comment
+# carries the same meaning with none of that risk.)
