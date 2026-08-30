@@ -1,7 +1,7 @@
 {
   "name": "@oatnil/ud-dataflow-diagram",
   "version": "0.1.0",
-  "description": "The dataflow diagram editor from UnDercontrol \u2014 a React component library.",
+  "description": "The dataflow diagram editor from UnDercontrol — a React component library.",
   "license": "MIT",
   "private": false,
   "type": "module",
@@ -20,7 +20,9 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:playground": "vite --config playground/vite.config.ts",
+    "build:playground": "vite build --config playground/vite.config.ts"
   },
   "peerDependencies": {
     "@xyflow/react": "^12.10.0",
@@ -40,6 +42,7 @@
     "tailwind-merge": "3.4.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@types/node": "^24.10.0",
@@ -53,9 +56,11 @@
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-i18next": "16.2.4",
+    "tailwindcss": "4.1.17",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
     "vitest": "^3.2.4",
+    "wrangler": "4.127.1",
     "zustand": "5.0.8"
   },
   "overrides": {

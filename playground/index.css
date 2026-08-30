@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@source "../src";            /* the package's utility classes live outside this root — same trap as ud's index.css:5 */
+
+/* ── The shadcn semantic tokens the package's classes resolve through
+   (bg-primary, text-muted-foreground, ring-destructive, …), and the light
+   palette behind them. Light-only on purpose: there is no .dark block. ── */
+@theme {
+  /* Core semantic colors */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius: var(--radius);
+}
+
+@layer base {
+  :root {
+    /* LIGHT MODE: Swiss Minimal (Stark White & Black) */
+    --background: 0 0% 100%;       /* Pure White */
+    --foreground: 0 0% 9%;         /* Jet Black text #171717 */
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+
+    --primary: 0 0% 9%;            /* Black Buttons */
+    --primary-foreground: 0 0% 98%; /* White Text */
+
+    --secondary: 0 0% 96%;         /* Very Light Gray for tags/secondary bg */
+    --secondary-foreground: 0 0% 9%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;  /* Neutral Gray text #737373 */
+
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 9%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 92%;            /* #ebebeb Subtle Borders */
+    --input: 0 0% 92%;
+    --ring: 0 0% 9%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  /* Tailwind v4 no longer defaults `border` to a gray; without this every `border`
+     class in the package paints in currentColor. ud states the same rule at its
+     index.css:375-377 — it is not part of the :root block above. */
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+html, body, #root { height: 100%; margin: 0; }

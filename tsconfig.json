@@ -16,5 +16,5 @@
     "noEmit": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "fixtures"]
+  "include": ["src", "fixtures", "playground"]
 }
