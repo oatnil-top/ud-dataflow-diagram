@@ -1,0 +1,13 @@
+{
+  // Three keys, like ud-vite-app/wrangler.jsonc:1-7. No `account_id` (it is an identifier
+  // that would live in a public repo), no `main` (there is no Worker script — this is a
+  // static asset upload, which is what lets the README promise a page with no backend),
+  // and no `observability` (nothing here should be logging visitors).
+  //
+  // `name` must equal the Worker name in the Cloudflare dashboard or the build fails.
+  // Sitting at the repo root rather than in playground/ keeps the Workers Builds "root
+  // directory" field empty — one less setting to get wrong.
+  "name": "ud-dataflow-diagram",
+  "compatibility_date": "2025-12-10",
+  "assets": { "directory": "./playground/dist" }
+}
