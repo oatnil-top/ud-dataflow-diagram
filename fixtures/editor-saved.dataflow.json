@@ -1,0 +1,94 @@
+{
+  "nodes": [
+    {
+      "id": "n_j3999xqc",
+      "type": "json",
+      "position": {
+        "x": 50,
+        "y": 50
+      },
+      "data": {
+        "name": "users",
+        "fields": [
+          {
+            "id": "798bx9du",
+            "name": "id",
+            "path": [
+              "id"
+            ],
+            "type": "string",
+            "example": "uuid"
+          },
+          {
+            "id": "1z1ifjy6",
+            "name": "email",
+            "path": [
+              "email"
+            ],
+            "type": "string",
+            "example": "alice@example.com"
+          },
+          {
+            "id": "t602s8mz",
+            "name": "saved_after_fix",
+            "path": [
+              "saved_after_fix"
+            ],
+            "type": "string",
+            "example": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "n_hv5njl58",
+      "type": "json",
+      "position": {
+        "x": 50,
+        "y": 370
+      },
+      "data": {
+        "name": "orders",
+        "fields": [
+          {
+            "id": "i81bdzn8",
+            "name": "id",
+            "path": [
+              "id"
+            ],
+            "type": "string",
+            "example": "uuid"
+          },
+          {
+            "id": "viqj7usc",
+            "name": "user_id",
+            "path": [
+              "user_id"
+            ],
+            "type": "string",
+            "example": "uuid"
+          },
+          {
+            "id": "ntya2pto",
+            "name": "total",
+            "path": [
+              "total"
+            ],
+            "type": "number",
+            "example": 42
+          }
+        ]
+      }
+    }
+  ],
+  "pipes": [
+    {
+      "id": "p_zksv6utl",
+      "type": "dataflow",
+      "source": "n_j3999xqc",
+      "target": "n_hv5njl58",
+      "sourceHandle": "output-id",
+      "targetHandle": "input-user_id"
+    }
+  ]
+}

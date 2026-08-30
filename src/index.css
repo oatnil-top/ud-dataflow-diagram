@@ -1,0 +1,243 @@
+/* Dataflow Editor Styles */
+
+/* Color palette - Slate & Royal Blue */
+.dataflow-editor {
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-400: #94a3b8;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1e293b;
+  --color-slate-900: #0f172a;
+
+  --color-royal-50: #eff6ff;
+  --color-royal-100: #dbeafe;
+  --color-royal-200: #bfdbfe;
+  --color-royal-400: #60a5fa;
+  --color-royal-500: #3b82f6;
+  --color-royal-600: #2563eb;
+  --color-royal-700: #1d4ed8;
+}
+
+/* Contextual ports - hidden by default, show on hover */
+.field-row .port {
+  width: 8px !important;
+  height: 8px !important;
+  background: #3b82f6 !important;
+  border: none !important;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.field-row:hover .port {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.2);
+  box-shadow: 0 0 8px #3b82f6;
+}
+
+/* Connected ports - hidden by default, visible on hover or node selection */
+.field-row .port.connected {
+  opacity: 0;
+}
+.field-row:hover .port.connected {
+  opacity: 1;
+}
+
+/* Node-level handles (title left/right, node top/bottom) */
+.node-handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: #3b82f6 !important;
+  border: none !important;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+/* Left/right handles sit at header height, not node center */
+.node-handle-header {
+  top: 22px !important;
+}
+
+/* Connected node handles - hidden by default, visible on hover or node selection */
+.node-handle.connected {
+  opacity: 0;
+}
+
+.json-node-wrapper:hover .node-handle,
+.react-flow__node.selected .node-handle {
+  opacity: 1;
+  scale: 1.2;
+  box-shadow: 0 0 8px #3b82f6;
+}
+
+/* Visual indent line for nested fields */
+.indent-line {
+  border-left: 1px solid #475569;
+  margin-left: 12px;
+}
+
+/* React Flow edge styling — thin lines per the flat design language */
+.react-flow__edge-path {
+  stroke: #94a3b8;
+  stroke-width: 1.5;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #3b82f6;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: #60a5fa;
+}
+
+/* Background grid — white canvas, structure comes from hairlines */
+.react-flow__background {
+  background-color: #ffffff;
+}
+
+/* Field highlighting on selection - legacy fallback */
+.field-row.field-highlighted {
+  background: rgba(59, 130, 246, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+.field-row.field-highlighted .port {
+  opacity: 1;
+  box-shadow: 0 0 12px #3b82f6;
+}
+
+/* Selected field border (the primary selected field, not just connected) */
+.field-row.field-selected {
+  box-shadow: inset 0 0 0 2px var(--highlight-color, #3b82f6);
+}
+
+/* Edge highlighting - animated flow */
+.react-flow__edge.edge-highlighted .react-flow__edge-path {
+  stroke-width: 3px !important;
+  stroke-dasharray: 8 4;
+  animation: flowAnimation 0.5s linear infinite;
+}
+
+@keyframes flowAnimation {
+  from {
+    stroke-dashoffset: 12;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Reconnect endpoint affordance (card 04692d7c) — hollow dots marking where an
+   edge can be grabbed and re-attached. The actual grab zone is React Flow's
+   invisible .react-flow__edgeupdater circle rendered on top of these.
+   Selection-first (owner, 2026-08-27): dots show on SELECTED only — the hover
+   half was deliberately removed, together with per-edge `reconnectable`
+   following selection (DataflowCanvas styledEdges), so what you see grabbable
+   is exactly what is grabbable. */
+.pipe-endpoint-affordance {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.react-flow__edge.selected .pipe-endpoint-affordance {
+  opacity: 1;
+}
+
+/* Process node handle highlighting */
+.process-handle-highlighted {
+  box-shadow: 0 0 12px #3b82f6 !important;
+}
+
+/* Group nodes: remove React Flow's default node border */
+.react-flow__node-group {
+  border: none !important;
+  background: none !important;
+  border-radius: 0 !important;
+}
+
+/* Node action buttons - hidden by default, show on hover */
+.node-actions {
+  opacity: 0;
+}
+
+.react-flow__node:hover .node-actions,
+.react-flow__node.selected .node-actions {
+  opacity: 1;
+}
+
+/* Node button styles */
+.node-btn {
+  color: #cbd5e1;
+  transition: color 0.15s ease;
+}
+
+.node-btn-rename:hover {
+  color: #3b82f6;
+}
+
+.node-btn-duplicate:hover {
+  color: #22c55e;
+}
+
+.node-btn-delete:hover {
+  color: #ef4444;
+}
+
+.node-btn-link:hover {
+  color: #3b82f6;
+}
+
+.node-btn-link-active {
+  color: #3b82f6 !important;
+}
+
+/* Edge labels paint above nodes.
+ *
+ * Card a3999651. React Flow lays out `.react-flow__viewport` as
+ *   edges → edgelabel-renderer → nodes
+ * with every layer at `z-index: auto`, so the node layer, being painted last,
+ * covers any label whose midpoint falls inside a node. Group frames are large,
+ * so on the Azure fixture 9 of 18 labels sat under a node and `TLS cert` was
+ * invisible where it crossed the GatewaySubnet header.
+ *
+ * The trade-off, deliberately taken: a label is the ONLY place an edge's meaning
+ * is written and there is no way to recover it once hidden (it is un-hittable, so
+ * even its `title` tooltip never fires), whereas a node covered by a label loses at
+ * most a 160px-wide single line and stays identifiable by its frame, icon and title.
+ * Accepted cost: a label crossing a dense `json` node can now hide one field row.
+ *
+ * 1100 clears every z a node can take: React Flow gives nodes 0, +1 per nesting
+ * level, and +SELECTED_NODE_Z (1000) while selected. It cannot leak into the app's
+ * own layers (src/lib/z-index.ts) because `.react-flow__viewport` is itself a
+ * stacking context. Do NOT go back to relying on DOM order — that is the bug.
+ */
+.react-flow__edgelabel-renderer {
+  z-index: 1100;
+}
+
+/* ── A canvas that is only for looking at ─────────────────────────────────────
+   The resource detail page renders a stored diagram read-only. ReactFlow's own
+   switches (nodesDraggable, nodesConnectable, elementsSelectable) say nothing
+   about the controls the node components render INSIDE themselves — rename,
+   delete, "add field" and the rest — and those mutate a store this surface never
+   saves, so a click there looks like an edit that silently vanishes.
+
+   Both rules are deliberately scoped to the node subtree and not to the pane, so
+   panning and zooming still work: they are how you look at a diagram.
+
+   They are stated once, here, rather than as a flag each node component checks.
+   There are ~80 such controls across seven node components; a per-site guard has
+   ~80 chances to miss one, and a missed one is invisible until someone clicks it.
+   A rule keyed on .react-flow__node covers every node type, including the next
+   one somebody adds. */
+.dataflow-readonly .react-flow__node {
+  pointer-events: none;
+}
+.dataflow-readonly .react-flow__node button,
+.dataflow-readonly .react-flow__node input,
+.dataflow-readonly .react-flow__node textarea {
+  display: none;
+}
