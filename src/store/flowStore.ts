@@ -48,6 +48,19 @@ export interface FlowState {
   clipboard: AnyNode | null
   rawEditNodeId: string | null
 
+  /**
+   * Which node the pointer is over, or null. Transient view state, deliberately
+   * living beside `rawEditNodeId` and `clipboard` rather than in a component:
+   * a collapsed note's peek panel (NoteNode) and its edges' visibility
+   * (DataflowCanvas / DataflowReadonlyPreview, via useCollapsedNoteEdges) must
+   * appear and disappear *together* (card a8596103), and two independent hover
+   * booleans cannot be relied on to agree. One store field, one truth.
+   *
+   * It never enters an undo snapshot (captureSnapshot takes nodes+pipes only)
+   * and never sets isDirty — hovering is not an edit.
+   */
+  hoveredNodeId: string | null
+
   // Dirty tracking
   isDirty: boolean
   markClean: () => void
@@ -91,6 +104,21 @@ export interface FlowState {
   updateShapeNode: (nodeId: string, data: Partial<ShapeNodeData>) => void
   updatePipe: (pipeId: string, data: Partial<Pick<PipeData, 'description' | 'sourceMarker' | 'targetMarker' | 'color' | 'lineWidth' | 'lineStyle' | 'animated' | 'labelOffset'>>) => void
   reconnectPipe: (oldPipe: Pipe, newConnection: Connection) => void
+
+  // Hover (see hoveredNodeId). Two co-writers on purpose and safely: NoteNode's own
+  // mouse handlers (so the package's node types keep working for anyone who mounts
+  // them in their own <ReactFlow> without wiring the canvas handlers) and the
+  // canvas-level onNodeMouseEnter/Leave (which is what lets hovering a NON-note node
+  // reveal the collapsed notes pointing at it). Both write the same id, so any
+  // interleaving is idempotent.
+  setHoveredNode: (nodeId: string) => void
+  /**
+   * Clear only if `nodeId` is still the hovered one. Moving the pointer straight from
+   * node A to node B does not guarantee leave(A) arrives before enter(B) — the DOM
+   * fires them per element and React batches — so an unguarded clear can wipe B's
+   * hover the instant it was set, which shows up as edges that flicker off mid-sweep.
+   */
+  clearHoveredNode: (nodeId: string) => void
 
   // Raw editor
   setRawEditNode: (nodeId: string | null) => void
@@ -203,6 +231,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
     pipes: [],
     clipboard: null,
     rawEditNodeId: null,
+    hoveredNodeId: null,
     isDirty: false,
     canUndo: false,
     canRedo: false,
@@ -806,6 +835,14 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       set({
         pipes: reconnectEdge(current, newConnection, get().pipes, { shouldReplaceId: false }) as Pipe[],
       })
+    },
+
+    setHoveredNode: (nodeId) => {
+      if (get().hoveredNodeId !== nodeId) set({ hoveredNodeId: nodeId })
+    },
+
+    clearHoveredNode: (nodeId) => {
+      if (get().hoveredNodeId === nodeId) set({ hoveredNodeId: null })
     },
 
     setRawEditNode: (nodeId) => {

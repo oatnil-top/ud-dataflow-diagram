@@ -40,6 +40,7 @@ import { useCanvasPaste } from './hooks/useCanvasPaste'
 import { computeGroupDropUpdates } from './utils/groupDrop'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
 import { nodeTypes, edgeTypes } from './registry'
+import { useCollapsedNoteEdges, NOTE_EDGE_REVEALED } from './hooks/useCollapsedNoteEdges'
 
 
 interface FlowProps {
@@ -76,6 +77,13 @@ function Flow({ store, embedMode }: FlowProps) {
   // Collapsed note/resource nodes render without their persisted size —
   // see stripSizeWhenCollapsed for why the store keeps it and the render drops it
   const renderNodes = useMemo(() => stripSizeWhenCollapsed(nodes), [nodes])
+
+  // Collapsed notes hide their own edges; hovering either end brings them back
+  // (card a8596103). Canvas-level, like handleNodeClick and for the same reason:
+  // every type in `nodeTypes` goes through these two handlers, so hovering a
+  // Shape/Resource/Json node reveals the collapsed notes attached to it without
+  // any node component knowing about notes.
+  const { noteEdgeClasses, onNodeMouseEnter, onNodeMouseLeave } = useCollapsedNoteEdges(store, nodes, pipes)
 
   const selectedNodes = useMemo(() => nodes.filter((n) => n.selected), [nodes])
   const selectedNodeIds = useMemo(() => selectedNodes.map((n) => n.id), [selectedNodes])
@@ -176,7 +184,21 @@ function Flow({ store, embedMode }: FlowProps) {
       // edge is selected, its 20px interaction band also paints above nodes,
       // so a click near the selected edge re-hits the edge rather than the
       // node under it; a pane click deselects and restores normal order.
-      const base = { ...pipe, reconnectable: !!pipe.selected, zIndex: pipe.selected ? 1001 : 0 }
+      // Muting is decided before every other branch below, because a note edge always
+      // carries pipe.style (the dashed look) and the `if (pipe.style) return base`
+      // early-return further down would otherwise drop the class on the floor — which
+      // is exactly the shape of "a perfectly legal render of the wrong thing".
+      const noteClass = noteEdgeClasses.get(pipe.id)
+      const base = noteClass
+        ? {
+            ...pipe,
+            // The <g> gets the class; the portalled label cannot, so it reads these
+            // two off data instead (PipeData.noteMuted).
+            data: { ...pipe.data, noteMuted: true, noteRevealed: noteClass.includes(NOTE_EDGE_REVEALED) },
+            reconnectable: !!pipe.selected,
+            zIndex: pipe.selected ? 1001 : 0,
+          }
+        : { ...pipe, reconnectable: !!pipe.selected, zIndex: pipe.selected ? 1001 : 0 }
       // ONE highlight style; two ways an edge gets selected into it (card efd95471).
       //
       //  - a FIELD selection colours handles, and an edge is lit when BOTH its ends are
@@ -198,15 +220,15 @@ function Flow({ store, embedMode }: FlowProps) {
         const color = HIGHLIGHT_COLORS[colorIndex % HIGHLIGHT_COLORS.length]
         return {
           ...base,
-          className: 'edge-highlighted',
+          className: noteClass ? `edge-highlighted ${noteClass}` : 'edge-highlighted',
           style: { stroke: color, strokeWidth: 3, filter: `drop-shadow(0 0 6px ${color})` },
         }
       }
       // Preserve existing pipe styles (dashed note/resource connections)
-      if (pipe.style) return base
-      return { ...base, className: '', style: undefined }
+      if (pipe.style) return noteClass ? { ...base, className: noteClass } : base
+      return { ...base, className: noteClass ?? '', style: undefined }
     })
-  }, [pipes, fieldColorMap, pipeColorMap])
+  }, [pipes, fieldColorMap, pipeColorMap, noteEdgeClasses])
 
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonlImportOpen, setJsonlImportOpen] = useState(false)
@@ -460,6 +482,8 @@ function Flow({ store, embedMode }: FlowProps) {
           onReconnectStart={() => setIsReconnecting(true)}
           onReconnectEnd={() => setIsReconnecting(false)}
           onNodeClick={handleNodeClick}
+          onNodeMouseEnter={onNodeMouseEnter}
+          onNodeMouseLeave={onNodeMouseLeave}
           onEdgeClick={handleEdgeClick}
           onNodeDragStart={handleNodeDragStart}
           onNodeDragStop={handleNodeDragStop}

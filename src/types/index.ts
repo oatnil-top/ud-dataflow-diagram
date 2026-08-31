@@ -167,6 +167,20 @@ export interface PipeData extends ElementData {
   // exact same midpoint — the author has no way to pull them apart, and two
   // stacked labels can read as one false sentence.
   labelOffset?: { x: number; y: number }
+  /**
+   * Transient (render-only, never persisted — like ResourceNodeData.uploading): this
+   * pipe has a COLLAPSED note on one end, so it is muted, and whether the pointer is
+   * currently revealing it. Written at the render boundary by DataflowCanvas /
+   * DataflowReadonlyPreview, never by an edit, never by import/export.
+   *
+   * It exists because the edge's className reaches the <g> but NOT the description
+   * label: EdgeLabelRenderer portals the label into .react-flow__edgelabel-renderer,
+   * a sibling of the edge layer. Without these two flags a muted note edge left its
+   * label floating on the canvas with no line under it. DataflowEdge reads them and
+   * puts the same two classes on the label div.
+   */
+  noteMuted?: boolean
+  noteRevealed?: boolean
 }
 
 // Map from element type string to its data type

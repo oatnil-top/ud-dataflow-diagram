@@ -161,7 +161,11 @@ function DataflowEdge({
       {description && (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan pointer-events-auto"
+            /* The label is portalled out of the edge's <g>, so the mute classes the
+               canvas puts on the edge never reach it — see PipeData.noteMuted. Same
+               two class names, so one CSS rule pair governs line and label together
+               and they can never fade apart. */
+            className={`nodrag nopan pointer-events-auto${data?.noteMuted ? ' pipe-note-muted' : ''}${data?.noteRevealed ? ' pipe-note-revealed' : ''}`}
             onPointerDown={onLabelPointerDown}
             onPointerMove={onLabelPointerMove}
             onPointerUp={onLabelPointerUp}

@@ -92,6 +92,14 @@ function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
   const updateNodeUrl = flowStore((state) => state.updateNodeUrl)
   const removeNode = flowStore((state) => state.removeNode)
   const setRawEditNode = flowStore((state) => state.setRawEditNode)
+  // Hover lives in the store, not in this component (card a8596103): a collapsed note's
+  // peek panel and its EDGES have to appear and disappear together, and the edges are
+  // decided one level up (useCollapsedNoteEdges). A local boolean here plus another one
+  // there is two clocks. The selector returns a boolean, so zustand re-renders only the
+  // two notes whose hover actually changed, not all 31.
+  const hovered = flowStore((state) => state.hoveredNodeId === id)
+  const setHoveredNode = flowStore((state) => state.setHoveredNode)
+  const clearHoveredNode = flowStore((state) => state.clearHoveredNode)
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -100,7 +108,6 @@ function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
   const [contentValue, setContentValue] = useState(data.content)
   const [isEditingUrl, setIsEditingUrl] = useState(false)
   const [urlValue, setUrlValue] = useState(data.url || '')
-  const [hovered, setHovered] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Resolve style values with defaults (amber)
@@ -171,13 +178,36 @@ function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
           backgroundColor: headerColor,
           borderColor: selected ? selectedBorderColor : borderColor,
         }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={() => setHoveredNode(id)}
+        onMouseLeave={() => clearHoveredNode(id)}
         onDoubleClick={toggleCollapsed}
-        title={data.name}
       >
         <NodePerimeterHandles className={handleClass} />
         <StickyNote size={14} style={{ color: textColor }} />
+        {/* Peek (card a8596103). Collapsing a note used to hide its content and keep its
+            line — the noisiest half of both. Now the line goes too, and hover brings back
+            content AND line together, so sweeping a column of collapsed notes answers
+            "which node is this one about" without opening any of them.
+
+            Always mounted, opacity-toggled, rather than mounted on hover: an element that
+            is unmounted cannot fade OUT, and the card asks for a fade in both directions.
+            It costs one hidden subtree per collapsed note and no work per frame — see the
+            note above .note-collapsed-peek in index.css.
+
+            pointer-events: none is load-bearing, not tidiness. The peek sits over the
+            canvas, and in a column of notes it covers the next note down; if it could take
+            the pointer it would eat that note's mouseenter and the reveal would just stop
+            working somewhere down the column, with nothing on screen saying why.
+
+            The native `title` tooltip this replaces was removed on purpose: two tooltips
+            for one square, one of them a second late, read as a bug. */}
+        <div
+          className={`note-collapsed-peek${hovered ? ' is-visible' : ''}`}
+          style={{ backgroundColor: fillColor, borderColor, color: textColor, fontSize: `${fontSize}px` }}
+        >
+          <div className="note-collapsed-peek-title">{data.name}</div>
+          {data.content && <div className="note-collapsed-peek-body">{data.content}</div>}
+        </div>
       </div>
     )
   }
@@ -191,8 +221,8 @@ function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
         backgroundColor: fillColor,
         borderColor: selected ? selectedBorderColor : borderColor,
       }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => setHoveredNode(id)}
+      onMouseLeave={() => clearHoveredNode(id)}
     >
       <NodeResizer
         minWidth={140}

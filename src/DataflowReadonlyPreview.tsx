@@ -12,6 +12,7 @@ import PipeMarkerDefs from './components/PipeMarkerDefs'
 import { createFlowStore } from './store/flowStore'
 import { FlowStoreContext } from './store/flowStoreContext'
 import { DiagramContext, type DiagramContextValue } from './diagramContext'
+import { useCollapsedNoteEdges, NOTE_EDGE_REVEALED } from './hooks/useCollapsedNoteEdges'
 
 interface DataflowReadonlyPreviewProps {
   /** The diagram's JSON, as stored in a `.dataflow.json` file. */
@@ -49,6 +50,26 @@ function Preview({ content, diagram }: DataflowReadonlyPreviewProps) {
   // keeps its expanded size in the data but must not occupy it on screen
   const nodes = useMemo(() => stripSizeWhenCollapsed(storeNodes), [storeNodes])
 
+  // ...and the same collapsed-note edge muting, for the same reason: this viewer is
+  // where the card's diagram is actually read (card a8596103). Read-only does not mean
+  // inert — hover is not an edit, so it works here exactly as it does in the editor.
+  const { noteEdgeClasses, onNodeMouseEnter, onNodeMouseLeave } = useCollapsedNoteEdges(store, storeNodes, pipes)
+  const edges = useMemo(
+    () =>
+      noteEdgeClasses.size === 0
+        ? pipes
+        : pipes.map((pipe) => {
+            const noteClass = noteEdgeClasses.get(pipe.id)
+            if (!noteClass) return pipe
+            return {
+              ...pipe,
+              className: noteClass,
+              data: { ...pipe.data, noteMuted: true, noteRevealed: noteClass.includes(NOTE_EDGE_REVEALED) },
+            }
+          }),
+    [pipes, noteEdgeClasses],
+  )
+
   const diagramContext = useMemo<DiagramContextValue>(
     () => ({ dataflowId: diagram?.dataflowId, historyId: diagram?.historyId }),
     [diagram?.dataflowId, diagram?.historyId],
@@ -60,9 +81,11 @@ function Preview({ content, diagram }: DataflowReadonlyPreviewProps) {
         <div className="dataflow-readonly w-full h-full min-h-[320px]">
           <ReactFlow
             nodes={nodes}
-            edges={pipes}
+            edges={edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
+            onNodeMouseEnter={onNodeMouseEnter}
+            onNodeMouseLeave={onNodeMouseLeave}
             fitView
             minZoom={0.05}
             maxZoom={4}

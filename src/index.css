@@ -146,6 +146,98 @@
   opacity: 1;
 }
 
+/* ── A collapsed note hides its own lines (card a8596103) ─────────────────────
+   31 notes each dashed back to their own node turned "collapse for quiet" into
+   the loudest state on the canvas: the content folded away and all 31 lines
+   stayed. Folding now takes the line with it, and hovering either END of the
+   line brings content and line back together.
+
+   Why muted and not `hidden: true`. React Flow's own `hidden` unmounts the edge,
+   which is cheaper — and it also makes the fade-out in the card impossible,
+   because there is nothing left to fade. So the edges stay mounted and stop
+   painting. `visibility: hidden` (not opacity alone) is what makes that real:
+   a `visibility: hidden` element is not painted AND is not hit-tested, so an
+   invisible note line cannot swallow a click meant for what is under it.
+
+   The delayed `visibility` transition is the standard trick for getting both
+   directions: going out, visibility waits for the opacity fade to finish;
+   coming in, it flips immediately so there is something to fade.
+
+   Measured cost of keeping them mounted, on the card's own graph (86 nodes /
+   64 edges, 31 of them muted) — see the task notes for the method: pan and zoom
+   are untouched, because React Flow transforms the viewport rather than
+   re-pathing edges, so a muted edge does no work per frame at all.
+
+   The same two class names are put on the edge's <g> AND on its description
+   label (DataflowEdge, via PipeData.noteMuted) — the label is portalled into a
+   different layer, so one class on the edge cannot reach it, and a label left
+   behind by a hidden line is a caption for nothing. */
+.pipe-note-muted {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+}
+.pipe-note-muted.pipe-note-revealed {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease, visibility 0s;
+}
+/* Revealed lines are deliberately louder than resting ones, and always the same
+   amber whatever colour the pipe carries. The card's ask ("否则在一堆已有连线里
+   还是找不着") is findability, and a line that keeps its own grey is exactly as
+   hard to pick out of 33 other grey lines as before. Amber because it is the
+   note's own accent — a revealed line reads as "this is a note's line", which is
+   the one thing every line in this state has in common. */
+.react-flow__edge.pipe-note-muted.pipe-note-revealed .react-flow__edge-path {
+  stroke: #f59e0b !important;
+  stroke-width: 2.5px !important;
+}
+
+/* The hover peek on a collapsed note — see NoteNode for why it is always mounted
+   and why pointer-events must stay off. Positioned to the right of the 32px
+   square: notes-per-node columns sit at the right edge of a diagram, and opening
+   leftward would cover the very node the peek is explaining. */
+.note-collapsed-peek {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: 320px;
+  max-height: 220px;
+  overflow: hidden;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  text-align: left;
+  cursor: default;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+}
+.note-collapsed-peek.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease, visibility 0s;
+}
+.note-collapsed-peek-title {
+  font-weight: 600;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+/* A peek is for identifying, not for reading: the body is clipped at 220px with
+   no scrollbar, because a pointer-events:none panel could not be scrolled anyway
+   and a note holding a Terraform block will always overflow. Opening the note is
+   still how you read it. */
+.note-collapsed-peek-body {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Process node handle highlighting */
 .process-handle-highlighted {
   box-shadow: 0 0 12px #3b82f6 !important;
@@ -232,8 +324,19 @@
    There are ~80 such controls across seven node components; a per-site guard has
    ~80 chances to miss one, and a missed one is invisible until someone clicks it.
    A rule keyed on .react-flow__node covers every node type, including the next
-   one somebody adds. */
-.dataflow-readonly .react-flow__node {
+   one somebody adds.
+
+   ⚠️ The block is on the node's CHILDREN, not on the node wrapper, and that is
+   not a style choice. Since card a8596103 the viewer passes onNodeMouseEnter /
+   onNodeMouseLeave (a collapsed note reveals its lines on hover here too), and
+   React Flow answers that by writing `pointer-events: all` INLINE onto every
+   node wrapper — an inline style no class rule can outrank. The rule that used
+   to sit on `.react-flow__node` would still be in this file, still look correct,
+   and quietly do nothing. One level down, inline styles cannot reach it: the
+   wrapper sees the pointer so hover works, and nothing inside a node is ever the
+   event target, so no body-level onDoubleClick (rename, edit content, toggle
+   collapse) can fire. */
+.dataflow-readonly .react-flow__node > * {
   pointer-events: none;
 }
 .dataflow-readonly .react-flow__node button,
