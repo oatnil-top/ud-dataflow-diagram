@@ -1,4 +1,4 @@
-import { Handle, Position } from '@xyflow/react'
+import { Handle, Position, useStore } from '@xyflow/react'
 
 type PerimeterPosition = 'top' | 'right' | 'bottom' | 'left'
 
@@ -28,6 +28,29 @@ export default function NodePerimeterHandles({ className, classNameByPosition }:
   /** Per-position class override, keyed top/right/bottom/left — used by JsonNode/ProcessNode which style header handles differently */
   classNameByPosition?: Partial<Record<PerimeterPosition, string>>
 }) {
+  // A read-only surface never paints these, whatever the node thinks (card a8596103).
+  //
+  // Nodes fade their dots in on hover, and that used to be unreachable in the viewer
+  // because nothing inside a node could be hovered. A collapsed note now takes its hover
+  // from the shared store, filled from the node WRAPPER, so hovering a note in a viewer
+  // started painting four "drag me to connect" dots on a surface where connecting is
+  // impossible. Measured, not inferred: the class read back as `!opacity-100`, computed
+  // opacity 1.
+  //
+  // ⛔ Why this is not a rule in index.css next to the other read-only ones. The visible
+  // class is Tailwind's `!opacity-100` — an IMPORTANT declaration inside `@layer
+  // utilities`. For important declarations the cascade REVERSES layer order, so a layered
+  // !important beats an unlayered one no matter how specific: a
+  // `.dataflow-readonly .react-flow__handle { opacity: 0 !important }` was written, looked
+  // right, and measured as opacity 1. The package ships unlayered CSS and does not own the
+  // host's layer order, so the only durable fix is to never emit the visible class here.
+  //
+  // ⛔ And not `display: none` / unmounting either: React Flow measures handle bounds out
+  // of the DOM and refuses to path an edge whose handle has none, so removing them from
+  // layout would silently empty the viewer of every edge.
+  const interactive = useStore((s) => s.elementsSelectable)
+  const hide = (cls?: string) => (interactive ? cls : cls?.replace('!opacity-100', '!opacity-0'))
+
   return (
     <>
       {PERIMETER_HANDLES.map(({ pos, position, id }) => (
@@ -36,7 +59,7 @@ export default function NodePerimeterHandles({ className, classNameByPosition }:
           type="source"
           position={position}
           id={id}
-          className={classNameByPosition?.[pos] ?? className}
+          className={hide(classNameByPosition?.[pos] ?? className)}
         />
       ))}
     </>

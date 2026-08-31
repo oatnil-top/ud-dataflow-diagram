@@ -69,4 +69,5 @@ describe('the read-only viewer and collapsed notes', () => {
     expect(typeof captured.onNodeMouseEnter).toBe('function');
     expect(typeof captured.onNodeMouseLeave).toBe('function');
   });
+
 });

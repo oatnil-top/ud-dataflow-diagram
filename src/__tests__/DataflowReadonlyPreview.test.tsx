@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import realGraph from '../../fixtures/editor-saved.dataflow.json';
 import DataflowReadonlyPreview from '../DataflowReadonlyPreview';
 import { nodeTypes, edgeTypes } from '../registry';
@@ -64,6 +64,37 @@ describe('read-only really means read-only', () => {
   it('marks its node subtree with the class the read-only rules key on', () => {
     const { container } = render(<DataflowReadonlyPreview content={JSON.stringify(realGraph)} />);
     expect(container.querySelector('.dataflow-readonly')).not.toBeNull();
+  });
+
+  /**
+   * Hovering a note in a VIEWER must not paint its four connection handles. It briefly
+   * did: moving a note's hover into the shared store (card a8596103, so the peek and the
+   * edges could not drift apart) also let the node wrapper's hover reach the handles,
+   * which the read-only pointer-events block used to swallow — four "drag me to connect"
+   * dots on a surface where connecting is impossible.
+   *
+   * The guard lives in NodePerimeterHandles, not in index.css, because the visible class
+   * is Tailwind's `!opacity-100` — an important declaration inside `@layer utilities`, and
+   * important declarations reverse layer order, so no unlayered rule this package ships
+   * can outrank it. Asserting on the class asserts the mechanism that actually decides.
+   */
+  it('never paints a note’s connection handles in a viewer, even while hovered', () => {
+    const graph = {
+      nodes: [{ id: 'tf', type: 'note', position: { x: 0, y: 0 }, data: { name: 'tf', content: 'x', collapsed: true } }],
+      pipes: [],
+    };
+    const { container } = render(<DataflowReadonlyPreview content={JSON.stringify(graph)} />);
+    const note = container.querySelector('.react-flow__node-note');
+    expect(note).not.toBeNull();
+
+    // React synthesises onMouseEnter from mouseover, so mouseOver is what drives it.
+    fireEvent.mouseOver(note!.firstElementChild ?? note!);
+
+    const handles = [...note!.querySelectorAll('.react-flow__handle')];
+    expect(handles.length).toBeGreaterThan(0);
+    for (const h of handles) {
+      expect(h.getAttribute('class')).not.toContain('!opacity-100');
+    }
   });
 
 });
