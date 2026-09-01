@@ -14,6 +14,8 @@ import { generateId } from '../types'
 import { applySetOperation, SET_OP_SYMBOLS, type SetOperation } from '../utils/fieldSetOps'
 import { sortNodesParentsFirst } from '../utils/nodeOrder'
 import { ensureNodeFieldIds, parseImportedGraph } from './importFormats'
+import { applyEditPlan as buildEditApplication, type ViewportRect } from './editPlan'
+import type { EditPlan, BadLine } from './dslParser'
 
 // React Flow uses "Edge", we call them "Pipe" in our domain
 export type Pipe = Edge<PipeData>
@@ -136,6 +138,17 @@ export interface FlowState {
    * See ImportResult for what the caller is expected to do with it.
    */
   importGraph: (json: string, viewportCenter?: { x: number; y: number }, opts?: ImportOptions) => ImportResult | null
+  /**
+   * Apply a parsed DSL edit plan (store/dslParser.ts).
+   *
+   * Deliberately takes an EditPlan and not text: this store has no way to parse DSL and
+   * cannot acquire one, which is the type-level half of "DSL is not a document format"
+   * (dslParser.ts header). The plan is already parsed when it arrives, so a parse failure
+   * can never reach a snapshot.
+   *
+   * Returns null only when the plan does nothing at all.
+   */
+  applyEditPlan: (plan: EditPlan, viewport?: ViewportRect) => ImportResult | null
   clearGraph: () => void
 
   /**
@@ -176,6 +189,17 @@ export interface ImportResult {
   skippedPipes: number
   /** Connections whose endpoints exist neither in the payload nor on the canvas. */
   droppedPipes: { source: string; target: string }[]
+  /**
+   * Which channel produced this. The summary bar reads it to know whether "ignored N
+   * lines" is even a sentence that can apply — a JSON payload has no lines.
+   */
+  format: 'json' | 'dsl'
+  /** DSL only: nodes that were already on the canvas and were renamed or gained fields. */
+  updatedNodes: number
+  /** DSL only: field-level links whose field did not exist, connected node-to-node. */
+  degradedLinks: number
+  /** DSL only: lines that were not edits, by line number (dslParser.BadLine). */
+  ignoredLines: BadLine[]
 }
 
 export type FlowStore = UseBoundStore<StoreApi<FlowState>>
@@ -1018,6 +1042,10 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
         skippedNodes: parsed.skippedNodes,
         skippedPipes: parsed.skippedPipes,
         droppedPipes: parsed.droppedPipes,
+        format: 'json',
+        updatedNodes: 0,
+        degradedLinks: 0,
+        ignoredLines: [],
       }
 
       if (replace) {
@@ -1035,6 +1063,37 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       // same payload does) touches neither the graph nor the history: no snapshot, no
       // dirty flag. That is what makes importing twice equal importing once.
       return result
+    },
+
+    applyEditPlan: (plan, viewport) => {
+      const applied = buildEditApplication(plan, {
+        nodes: get().nodes,
+        pipes: get().pipes,
+        generatePipeId,
+        viewport,
+      })
+
+      const touchedGraph =
+        applied.addedNodes > 0 || applied.updatedNodes > 0 || applied.addedPipes > 0
+      if (touchedGraph) {
+        // One paste is one undo entry. The snapshot is pushed only now, after the plan is
+        // known to change something: a paste that changes nothing must not dirty the
+        // document or put an empty step in the history.
+        pushSnapshot()
+        set({ nodes: sortNodesParentsFirst(applied.nodes) as AnyNode[], pipes: applied.pipes })
+      }
+
+      return {
+        addedNodes: applied.addedNodes,
+        addedPipes: applied.addedPipes,
+        skippedNodes: 0,
+        skippedPipes: applied.skippedPipes,
+        droppedPipes: applied.droppedPipes,
+        format: 'dsl',
+        updatedNodes: applied.updatedNodes,
+        degradedLinks: applied.degradedLinks,
+        ignoredLines: applied.ignoredLines,
+      }
     },
 
     clearGraph: () => {

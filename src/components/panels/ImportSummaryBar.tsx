@@ -25,11 +25,19 @@ export default function ImportSummaryBar() {
   if (!summary) return null
 
   const { addedNodes, addedPipes, skippedNodes, skippedPipes, droppedPipes } = summary
-  const nothingHappened = addedNodes === 0 && addedPipes === 0
+  const { updatedNodes, degradedLinks, ignoredLines } = summary
+  // Modifying a node is a real outcome with no new node and no new edge to show for it —
+  // without it in this test, "node users 客户" reports as "nothing happened".
+  const nothingHappened = addedNodes === 0 && addedPipes === 0 && updatedNodes === 0
 
   const notes: string[] = []
+  // Not repeated when the headline is already "modified N nodes" (the updates-only case).
+  if (updatedNodes > 0 && (addedNodes > 0 || addedPipes > 0)) {
+    notes.push(t('resources.dataflow.paste.updatedNodes', { n: updatedNodes }))
+  }
   if (skippedNodes > 0) notes.push(t('resources.dataflow.paste.skippedNodes', { n: skippedNodes }))
   if (skippedPipes > 0) notes.push(t('resources.dataflow.paste.skippedPipes', { n: skippedPipes }))
+  if (degradedLinks > 0) notes.push(t('resources.dataflow.paste.degradedLinks', { n: degradedLinks }))
   if (droppedPipes.length > 0) {
     notes.push(t('resources.dataflow.paste.droppedPipes', {
       n: droppedPipes.length,
@@ -37,6 +45,23 @@ export default function ImportSummaryBar() {
       endpoint: droppedPipes[0].target,
     }))
   }
+  if (ignoredLines.length > 0) {
+    // Name the first line number. The user's next move is to look at that line in the chat
+    // window they still have open, so a count alone would send them scanning.
+    notes.push(t('resources.dataflow.paste.ignoredLines', {
+      n: ignoredLines.length,
+      line: ignoredLines[0].line,
+    }))
+  }
+
+  /**
+   * The way out of a cut-off answer, and the reason the DSL is line-oriented at all.
+   *
+   * Every line is parsed alone, so a truncated answer costs exactly its last line — and
+   * unlike half a JSON object, the continuation a chat writes next is itself valid input.
+   * Saying so here is what turns that property into something a user can act on.
+   */
+  const truncatedLine = ignoredLines.find((l) => l.reason === 'maybeTruncated')
 
   return (
     <div
@@ -47,14 +72,22 @@ export default function ImportSummaryBar() {
         <span className="font-medium">
           {nothingHappened
             ? t('resources.dataflow.paste.nothingAdded')
-            // A pure pipe delta ("only connect these two") legitimately adds zero nodes;
-            // "Imported 0 nodes and 1 connections" is true and reads like a failure.
-            : addedNodes === 0
-              ? t('resources.dataflow.paste.addedPipesOnly', { pipes: addedPipes })
-              : t('resources.dataflow.paste.added', { nodes: addedNodes, pipes: addedPipes })}
+            // Three shapes that all legitimately add zero nodes, and each reads like a
+            // failure under the general sentence: a pure pipe delta ("only connect these
+            // two"), and a DSL edit that only renamed a node or only added fields to one.
+            : addedNodes === 0 && addedPipes === 0
+              ? t('resources.dataflow.paste.updatedOnly', { nodes: updatedNodes })
+              : addedNodes === 0
+                ? t('resources.dataflow.paste.addedPipesOnly', { pipes: addedPipes })
+                : t('resources.dataflow.paste.added', { nodes: addedNodes, pipes: addedPipes })}
         </span>
         {notes.length > 0 && (
           <span style={{ color: '#64748b' }}>{` · ${notes.join(' · ')}`}</span>
+        )}
+        {truncatedLine && (
+          <div className="text-xs mt-0.5" style={{ color: '#64748b' }}>
+            {t('resources.dataflow.paste.continueFromLine', { line: truncatedLine.line })}
+          </div>
         )}
       </div>
       {!nothingHappened && canUndo && (

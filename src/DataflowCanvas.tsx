@@ -64,6 +64,7 @@ function Flow({ store, embedMode }: FlowProps) {
   const addNoteNode = store((state) => state.addNoteNode)
   const importGraph = store((state) => state.importGraph)
   const setImportSummary = store((state) => state.setImportSummary)
+  const applyEditPlan = store((state) => state.applyEditPlan)
   const addResourceNode = store((state) => state.addResourceNode)
   const addGroupNode = store((state) => state.addGroupNode)
   const addIconNode = store((state) => state.addIconNode)
@@ -256,6 +257,7 @@ function Flow({ store, embedMode }: FlowProps) {
     addResourceNode,
     addNoteNode,
     importGraph,
+    applyEditPlan,
     setImportSummary,
     t,
   })
@@ -370,6 +372,32 @@ function Flow({ store, embedMode }: FlowProps) {
       x: window.innerWidth / 2,
       y: window.innerHeight / 2,
     })
+  }, [screenToFlowPosition])
+
+  /**
+   * The visible canvas as a RECTANGLE in flow coordinates — the two screen corners run
+   * through the same projection the centre uses.
+   *
+   * A centre is not enough for the DSL channel. Its rule is "every node this paste created
+   * overlaps the viewport" (store/editPlan.ts), and deciding that needs the edges: at 10%
+   * zoom the rectangle is ten times wider in flow units than at 100%, so the same centre
+   * describes wildly different amounts of room.
+   *
+   * Derived from the window rather than the pane element, which makes it a slight
+   * OVERestimate whenever the canvas is inset (the editor's header bar). Harmless in the
+   * direction that matters: placement starts from the centre and works outward, so the
+   * error can only affect a node pushed to the very edge, and it never shrinks the
+   * rectangle below what is actually on screen.
+   */
+  const getViewportRect = useCallback(() => {
+    const topLeft = screenToFlowPosition({ x: 0, y: 0 })
+    const bottomRight = screenToFlowPosition({ x: window.innerWidth, y: window.innerHeight })
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
+    }
   }, [screenToFlowPosition])
 
   // Canvas menu handlers (for non-context menu usage)
@@ -552,6 +580,7 @@ function Flow({ store, embedMode }: FlowProps) {
             onAIGenerate={onAIGenerate}
             embedMode={embedMode}
             getViewportCenter={getViewportCenter}
+            getViewportRect={getViewportRect}
           />
         )}
 
@@ -648,6 +677,7 @@ function Flow({ store, embedMode }: FlowProps) {
           isOpen={graphImportOpen}
           onClose={() => setGraphImportOpen(false)}
           getViewportCenter={getViewportCenter}
+          getViewportRect={getViewportRect}
         />
 
         {/* What the last paste did, and the way back out of it. */}

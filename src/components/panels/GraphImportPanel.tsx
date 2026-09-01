@@ -3,18 +3,21 @@ import { useTranslation } from 'react-i18next'
 import { X, Upload } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStoreContext'
 import { importPastedGraph, PASTE_FAILURE_KEYS } from '../../store/pasteImport'
+import type { ViewportRect } from '../../store/editPlan'
 
 interface GraphImportPanelProps {
   isOpen: boolean
   onClose: () => void
   getViewportCenter?: () => { x: number; y: number }
+  getViewportRect?: () => ViewportRect
 }
 
-export default function GraphImportPanel({ isOpen, onClose, getViewportCenter }: GraphImportPanelProps) {
+export default function GraphImportPanel({ isOpen, onClose, getViewportCenter, getViewportRect }: GraphImportPanelProps) {
   const { t } = useTranslation()
   const flowStore = useFlowStore()
   const importGraph = flowStore((state) => state.importGraph)
   const setImportSummary = flowStore((state) => state.setImportSummary)
+  const applyEditPlan = flowStore((state) => state.applyEditPlan)
   const [jsonText, setJsonText] = useState('')
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -33,7 +36,10 @@ export default function GraphImportPanel({ isOpen, onClose, getViewportCenter }:
     // import with paste semantics — lives in pasteImport.ts so this panel, the toolbar
     // popover and canvas Ctrl+V cannot drift apart. What used to be here was a raw
     // JSON.parse whose error text ("Unexpected token '`'") was shown to the user verbatim.
-    const outcome = importPastedGraph(jsonText, { importGraph, setImportSummary }, getViewportCenter?.())
+    const outcome = importPastedGraph(jsonText, { importGraph, applyEditPlan, setImportSummary }, {
+      center: getViewportCenter?.(),
+      rect: getViewportRect?.(),
+    })
     if (!outcome.ok) {
       setError(t(PASTE_FAILURE_KEYS[outcome.reason]))
       return

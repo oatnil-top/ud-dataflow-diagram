@@ -6,6 +6,7 @@ import ImportSummaryBar from '../components/panels/ImportSummaryBar';
 import { FlowStoreContext } from '../store/flowStoreContext';
 import { createFlowStore } from '../store/flowStore';
 import { registerDataflowMessages } from '../locales/register';
+import { parseDsl } from '../store/dslParser';
 
 /**
  * Rendered against the REAL locale files, not a `t: (k) => k` stub. A stub would pass on
@@ -102,5 +103,47 @@ describe('ImportSummaryBar', () => {
 
     expect(store.getState().nodes).toHaveLength(0);
     expect(store.getState().importSummary).toBeNull();
+  });
+});
+
+/**
+ * The DSL channel's own report lines. Same rule as above: rendered through the real
+ * locale files, so a missing key or an unfired interpolation fails here rather than in
+ * front of a user.
+ */
+describe('ImportSummaryBar — what a DSL paste reports', () => {
+  const seeded = () => {
+    const store = createFlowStore();
+    store.getState().importGraph(JSON.stringify(GRAPH), undefined, { replace: true });
+    return store;
+  };
+  const applyAndRender = (store: ReturnType<typeof createFlowStore>, dsl: string) => {
+    const result = store.getState().applyEditPlan(parseDsl(dsl), { x: 0, y: 0, width: 1440, height: 900 })!;
+    store.getState().setImportSummary(result);
+    renderWith(store);
+  };
+
+  it('a rename with no new node is "Modified 1 nodes", not "nothing happened"', () => {
+    applyAndRender(seeded(), 'node users 客户');
+    expect(screen.getByText(/Modified 1 nodes/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('Nothing new to add');
+    expect(document.body.textContent).not.toContain('{{');
+  });
+
+  it('names the ignored lines by number', () => {
+    applyAndRender(seeded(), 'node payments 支付: amount number\nI hope this helps!');
+    expect(document.body.textContent).toMatch(/1 lines ignored \(from line 2\)/);
+    expect(document.body.textContent).not.toContain('resources.dataflow');
+  });
+
+  it('a cut-off last line gets the way out, with the line to continue from', () => {
+    applyAndRender(seeded(), 'node payments 支付: amount number\nlink orde');
+    expect(document.body.textContent).toMatch(/continue from line 2/);
+    expect(document.body.textContent).not.toContain('{{');
+  });
+
+  it('a field-level link that had to degrade says so', () => {
+    applyAndRender(seeded(), 'link users.nope -> orders.also_nope');
+    expect(document.body.textContent).toMatch(/1 connected node-to-node \(field not found\)/);
   });
 });

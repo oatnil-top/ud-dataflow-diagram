@@ -378,6 +378,7 @@ describe('a pure pipe delta arriving the way a chat writes it', () => {
 
     const outcome = importPastedGraph(CHAT_ANSWER, {
       importGraph: store.getState().importGraph,
+      applyEditPlan: store.getState().applyEditPlan,
       setImportSummary: store.getState().setImportSummary,
     })
 

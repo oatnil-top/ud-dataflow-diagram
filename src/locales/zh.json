@@ -11,6 +11,8 @@
   "promptCopied": "提示词已复制到剪贴板",
   "copyForAI": "复制给 AI",
   "copiedForAI": "图表已复制为 AI 文本格式",
+  "copyGraphForEditing": "复制当前图",
+  "graphForEditingEmpty": "画布是空的 —— 没有可复制的内容",
   "quitConfirmTitle": "退出编辑器？",
   "quitConfirmDescription": "所有未保存的更改将被丢弃。",
   "quitConfirmAction": "确认退出",
@@ -200,8 +202,14 @@
     "noJson": "粘贴的内容里没有找到图 JSON。请重新复制提示词(导出 → 复制提示词),在 AI 聊天里跑一遍,再把回答粘回来。",
     "malformed": "找到了像 JSON 的内容,但读不出来。让聊天重新单独输出一次 JSON,前后不要带别的文字。",
     "notAGraph": "这份 JSON 是合法的,但里面没有可导入的内容。它需要一个 \"nodes\" 数组 —— 若只想给画布上已有的节点加连线,则需要一个 \"pipes\" 数组。",
-    "promptCopiedWithGraph": "提示词已复制,包含当前图的 {{n}} 个节点",
-    "promptCopiedTrimmed": "提示词已复制,包含当前图的 {{n}} 个节点 —— 为控制长度已省略字段示例值"
+    "updatedNodes": "修改 {{n}} 个节点",
+    "updatedOnly": "已修改 {{nodes}} 个节点",
+    "degradedLinks": "{{n}} 条按节点级连接(找不到对应字段)",
+    "ignoredLines": "忽略 {{n}} 行(第 {{line}} 行起)",
+    "continueFromLine": "回聊天里让它从第 {{line}} 行继续,续行直接粘回来即可。",
+    "dslUnreadable": "看起来是编辑指令,但没有一行能读出来。对照报告里的行号看看聊天里的那一行,或重新复制提示词(导出 → 复制为提示词)再问一次。",
+    "graphForEditingCopied": "当前图已复制({{n}} 个节点)—— 粘到聊天里,再说你要改什么",
+    "graphForEditingTrimmed": "当前图已复制({{n}} 个节点)—— 为控制长度已省略字段示例值"
   },
   "setOp": {
     "union": "并集 (A ∪ B) —— 两者的所有字段",

@@ -11,6 +11,8 @@
   "promptCopied": "Prompt copied to clipboard",
   "copyForAI": "Copy for AI",
   "copiedForAI": "Diagram copied as text for AI",
+  "copyGraphForEditing": "Copy Current Diagram",
+  "graphForEditingEmpty": "The diagram is empty — nothing to copy",
   "quitConfirmTitle": "Quit Editor?",
   "quitConfirmDescription": "All unsaved changes will be discarded.",
   "quitConfirmAction": "Confirm Quit",
@@ -200,8 +202,14 @@
     "noJson": "No diagram JSON found in what you pasted. Copy the prompt again (Export → Copy as Prompt), run it in your AI chat, and paste the answer back.",
     "malformed": "Found something that looks like JSON, but it could not be read. Ask the chat to output the JSON again on its own, with nothing before or after it.",
     "notAGraph": "That JSON is valid but contains nothing to import. It needs a \"nodes\" array — or, to only add connections between nodes already on the canvas, a \"pipes\" array.",
-    "promptCopiedWithGraph": "Prompt copied, including your current diagram ({{n}} nodes)",
-    "promptCopiedTrimmed": "Prompt copied with your current diagram ({{n}} nodes) — example values were left out to keep it short"
+    "updatedNodes": "{{n}} nodes modified",
+    "updatedOnly": "Modified {{nodes}} nodes",
+    "degradedLinks": "{{n}} connected node-to-node (field not found)",
+    "ignoredLines": "{{n}} lines ignored (from line {{line}})",
+    "continueFromLine": "Go back to the chat and ask it to continue from line {{line}} — paste the continuation straight back here.",
+    "dslUnreadable": "Those look like edit commands, but none of them could be read. Check the first reported line in your chat, or re-copy the prompt (Export -> Copy as Prompt) and ask again.",
+    "graphForEditingCopied": "Current diagram copied ({{n}} nodes) — paste it into your chat, then ask for the change",
+    "graphForEditingTrimmed": "Current diagram copied ({{n}} nodes) — example values were left out to keep it short"
   },
   "setOp": {
     "union": "Union (A ∪ B) — all fields from both",

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { graphToContext } from '../graphToContext'
-import { buildCopyPrompt, DATAFLOW_COPY_PROMPT } from '../graphToPrompt'
+import { buildGraphForEditing, DATAFLOW_COPY_PROMPT } from '../graphToPrompt'
 import type { AnyNode, Pipe } from '../../store/flowStore'
 import { createFlowStore } from '../../store/flowStore'
 
@@ -57,24 +57,34 @@ describe('graphToContext — exportGraph minus geometry', () => {
   })
 })
 
-describe('buildCopyPrompt', () => {
-  it('an empty canvas gets the prompt alone', () => {
-    const prompt = buildCopyPrompt([], [])
-    expect(prompt.text).toBe(DATAFLOW_COPY_PROMPT)
-    expect(prompt.contextNodes).toBe(0)
+describe('the copy prompt and the graph are two separate clipboards now', () => {
+  it('the prompt NEVER carries the diagram — that is the whole reason they were split', () => {
+    expect(DATAFLOW_COPY_PROMPT).not.toContain('Current graph')
+    expect(DATAFLOW_COPY_PROMPT).not.toContain('"id"')
   })
 
-  it('a non-empty canvas is appended under the heading the prompt tells the model to read', () => {
-    const prompt = buildCopyPrompt(nodes, pipes)
-    expect(prompt.text).toContain('## Current graph')
-    expect(prompt.text).toContain('"id": "users"')
-    expect(prompt.contextNodes).toBe(1)
-    // The clause and the section have to agree on the exact heading or the contract is dead.
-    expect(DATAFLOW_COPY_PROMPT).toContain('"Current graph" section')
+  it('the prompt teaches the two verbs and nothing that could describe a document', () => {
+    expect(DATAFLOW_COPY_PROMPT).toContain('node <id> <display name>')
+    expect(DATAFLOW_COPY_PROMPT).toContain('link <sourceId> -> <targetId>')
+    // Geometry, grouping and handles are unsayable in the grammar; the material must not
+    // hint otherwise, or a model will invent syntax the parser cannot read.
+    expect(DATAFLOW_COPY_PROMPT).not.toMatch(/position|parentId|sourceHandle|"nodes"/)
   })
 
-  it('the prompt stays small enough to paste into a free chat box', () => {
-    expect(Buffer.byteLength(DATAFLOW_COPY_PROMPT)).toBeLessThan(4500)
+  it('it is the delivered 1296-byte artifact, not a draft — free chat boxes have a ceiling', () => {
+    const bytes = Buffer.byteLength(DATAFLOW_COPY_PROMPT)
+    expect(bytes).toBeGreaterThan(1000)
+    expect(bytes).toBeLessThan(1600)
+  })
+
+  it('buildGraphForEditing hands over the ids a link command has to name', () => {
+    const graph = buildGraphForEditing(nodes, pipes)
+    expect(graph.text).toContain('"id": "users"')
+    expect(graph.nodeCount).toBe(1)
+  })
+
+  it('an empty canvas has no graph to hand over', () => {
+    expect(buildGraphForEditing([], [])).toMatchObject({ text: '', nodeCount: 0 })
   })
 
   it('⛔ graphToText stays id-free — this channel must not turn "Copy for AI" writable', async () => {

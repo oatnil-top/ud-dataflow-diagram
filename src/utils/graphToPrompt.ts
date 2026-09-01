@@ -2,10 +2,16 @@ import type { AnyNode, Pipe } from '../store/flowStore'
 import { graphToContext } from './graphToContext'
 
 /**
- * The prompt a user copies into whatever chat window they have, so that pasting the
- * answer back draws a diagram. Also the in-app AI panel's system prompt: the two differ
- * only in their opening sentence, and the body is single-sourced here so they can never
- * drift apart.
+ * The in-app AI Generate panel's system prompt — WHOLE-GRAPH JSON.
+ *
+ * It used to be shared with the copy-to-clipboard prompt; the two have parted ways
+ * (design fb629b6a note 9630c775 section 2). This panel asks a host-configured model for
+ * a whole diagram, which is what JSON is for and what the model behind it is known to
+ * handle. The clipboard prompt now teaches the edit DSL instead, because it serves a
+ * different job (a small change, in someone else's free chat window) with a different
+ * constraint (output length).
+ *
+ * Whether this panel should follow is a separate decision, deliberately not taken here.
  *
  * The body teaches the FULL graph format — the only format the editor accepts and the
  * only format of a stored diagram's data (master, 2026-08-26). It deliberately teaches no
@@ -101,38 +107,82 @@ The expected output is:
   ]
 }`
 
-export const DATAFLOW_COPY_PROMPT = `You are a data flow diagram generator. Given a data structure description (SQL DDL, psql \\d output, API specs, plain text, etc.), generate a JSON graph. I will paste your answer into a diagram editor.
-${DATAFLOW_PROMPT_BODY}`
-
 /** System prompt for the in-app AI Generate panel */
 export const DATAFLOW_SYSTEM_PROMPT = `You are a data flow diagram generator. The user will provide structured data descriptions (SQL DDL, psql \\d output, API specs, plain text, etc.) and you must parse them into a JSON structure representing data flow nodes and their connections.
 ${DATAFLOW_PROMPT_BODY}`
 
-export interface CopyPrompt {
+/**
+ * The text a user copies into whatever chat window they have, so that pasting the answer
+ * back EDITS their diagram.
+ *
+ * This is a teaching material, not a serialization format. It defines two verbs — `node`
+ * and `link` — and nothing else, and store/dslParser.ts is the implementation of exactly
+ * this contract. Change one and change the other: this paragraph is what a stranger's
+ * model reads, and the parser is what their answer meets.
+ *
+ * WHY IT IS NOT JSON ANY MORE (design fb629b6a note 9630c775). Measured, same request,
+ * same model: five tables and their foreign keys came back as 3665 bytes / 1110 tokens of
+ * JSON and 468 bytes / 113 tokens of this. Output length is the whole ballgame in a free
+ * chat window — it is where answers get cut off — and the shape of the damage differs
+ * too. Truncate this and every complete line still applies, because each line is parsed
+ * alone; truncate JSON and half an object takes the whole answer with it. Measured there
+ * as well: cut at 300 bytes, five nodes landed and only the tail line was flagged.
+ *
+ * IT DOES NOT CARRY THE GRAPH. Earlier versions appended the current canvas below the
+ * prompt. It is a separate button now (buildGraphForEditing) because most requests do not
+ * need it, and a canvas pasted into every conversation was spending the one budget that
+ * matters on context the model was not going to use. The material tells the model to ASK
+ * when it needs the graph, and a real run confirmed it does.
+ *
+ * These 1296 bytes / 305 tokens are the delivered artifact, not a draft of one.
+ */
+export const DATAFLOW_COPY_PROMPT = `Turn my request into diagram edit commands — plain text, ONE command per line, nothing else. No JSON, no code fence, no explanations.
+
+Commands:
+node <id> <display name>: <field> <type>, <field> <type>, ...
+link <sourceId> -> <targetId>
+
+Rules:
+- "node" with a new id CREATES a node; with an existing id it MODIFIES that node: the display name is replaced, listed fields are added or updated by name, existing fields are never removed.
+- ids are short ascii words; the display name may be in any language; the ": fields" part is optional.
+- <type> is one of string | number | boolean | uuid | object (optional, default string). Nested fields use dots: address.city string
+- "link" connects two node ids — ids from my current graph (I may paste it in this chat) or ids you created above. To connect two specific fields: link users.id -> orders.user_id
+- Direction follows the reference: from the entity being referenced to the entity holding the reference.
+- Never invent ids I did not give you, except ids for nodes you are creating. If my request refers to my existing diagram and I have not pasted my current graph, ask me for it in plain text first.
+
+Example:
+node users 用户: id uuid, email string
+node orders 订单: id uuid, user_id uuid, total number
+link users.id -> orders.user_id`
+
+export interface GraphForEditing {
   text: string
-  /** Nodes handed to the model as context; 0 when the canvas was empty. */
-  contextNodes: number
+  /** Nodes handed to the model; 0 when the canvas was empty. */
+  nodeCount: number
   /** True when the canvas was too large to send in full — example values were dropped. */
   degraded: boolean
 }
 
 /**
- * The prompt as it goes to the clipboard: the static body, plus the current canvas when
- * there is one. An empty canvas gets the prompt alone — the "Current graph" clause above
- * is written to be inert without this section.
+ * The current diagram, for pasting into a chat that has already been taught the DSL.
+ *
+ * Its own button, on purpose. The material above teaches editing without needing a graph,
+ * and a request like "add a payments table" needs no context at all; only "connect
+ * products to orders" and "rename users" do, and those are the moments the user reaches
+ * for this. Splitting them means the common case does not pay for the rare one.
+ *
+ * READ material, not a WRITE format: the model reads ids out of this JSON and answers in
+ * the DSL. It is graphToContext (the import format minus geometry) precisely so the ids
+ * it shows are the ids a `link` line has to name.
  */
-export function buildCopyPrompt(nodes: AnyNode[], pipes: Pipe[]): CopyPrompt {
-  if (nodes.length === 0) {
-    return { text: DATAFLOW_COPY_PROMPT, contextNodes: 0, degraded: false }
-  }
+export function buildGraphForEditing(nodes: AnyNode[], pipes: Pipe[]): GraphForEditing {
+  if (nodes.length === 0) return { text: '', nodeCount: 0, degraded: false }
   const context = graphToContext(nodes, pipes)
   return {
-    text: `${DATAFLOW_COPY_PROMPT}
-
-## Current graph
+    text: `This is my current diagram. Use these ids when you write link and node commands.
 
 ${context.json}`,
-    contextNodes: context.nodeCount,
+    nodeCount: context.nodeCount,
     degraded: context.degraded,
   }
 }

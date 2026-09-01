@@ -5,6 +5,8 @@ import { useDataflowHost, useNotify } from '../host'
 import type { ResourceNodeData } from '../types'
 import { clipboardTextIsGraph, importPastedGraph, PASTE_FAILURE_KEYS } from '../store/pasteImport'
 import type { ImportResult } from '../store/flowStore'
+import type { ViewportRect } from '../store/editPlan'
+import type { EditPlan } from '../store/dslParser'
 
 interface UseCanvasPasteParams {
   getNodes: () => Node[]
@@ -20,6 +22,8 @@ interface UseCanvasPasteParams {
     viewportCenter?: { x: number; y: number },
     opts?: { replace?: boolean; sameIdMeansSameNode?: boolean },
   ) => ImportResult | null
+  /** Apply a parsed DSL edit plan (store.applyEditPlan). */
+  applyEditPlan: (plan: EditPlan, viewport?: ViewportRect) => ImportResult | null
   setImportSummary: (summary: ImportResult | null) => void
   t: TFunction
 }
@@ -51,6 +55,7 @@ export function useCanvasPaste({
   addResourceNode,
   addNoteNode,
   importGraph,
+  applyEditPlan,
   setImportSummary,
   t,
 }: UseCanvasPasteParams) {
@@ -121,6 +126,17 @@ export function useCanvasPaste({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       })
+      // The DSL channel places new nodes against the whole visible rectangle, not a point
+      // — see store/editPlan.ts. Derived here the same way DataflowCanvas.getViewportRect
+      // derives it, from the two screen corners.
+      const topLeft = screenToFlowPosition({ x: 0, y: 0 })
+      const bottomRight = screenToFlowPosition({ x: window.innerWidth, y: window.innerHeight })
+      const rect = {
+        x: topLeft.x,
+        y: topLeft.y,
+        width: bottomRight.x - topLeft.x,
+        height: bottomRight.y - topLeft.y,
+      }
 
       // Read text from system clipboard; if it's dataflow JSON, paste nodes;
       // if it contains resource:// URIs, create resource nodes;
@@ -134,7 +150,7 @@ export function useCanvasPaste({
           if (trimmed) {
             // A graph an outside model wrote — import it instead of noting it down.
             if (clipboardTextIsGraph(trimmed)) {
-              const outcome = importPastedGraph(trimmed, { importGraph, setImportSummary }, center)
+              const outcome = importPastedGraph(trimmed, { importGraph, applyEditPlan, setImportSummary }, { center, rect })
               if (!outcome.ok) notify('error', t(PASTE_FAILURE_KEYS[outcome.reason]))
               return
             }
@@ -183,5 +199,5 @@ export function useCanvasPaste({
 
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
-  }, [pasteNode, pasteNodesFromClipboard, screenToFlowPosition, getNodes, updateResourceNode, addResourceNode, addNoteNode, importGraph, setImportSummary, upload, describe, notify, t])
+  }, [pasteNode, pasteNodesFromClipboard, screenToFlowPosition, getNodes, updateResourceNode, addResourceNode, addNoteNode, importGraph, applyEditPlan, setImportSummary, upload, describe, notify, t])
 }

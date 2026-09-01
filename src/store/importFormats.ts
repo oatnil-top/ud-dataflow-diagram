@@ -698,7 +698,7 @@ export function computeTopologicalLayout(
  * untouched. Like solved positions, filled handles materialize on the first
  * human save.
  */
-function fillMissingHandles(nodes: Node[], pipes: Pipe[], existingNodes: AnyNode[] = []): void {
+export function fillMissingHandles(nodes: Node[], pipes: Pipe[], existingNodes: AnyNode[] = []): void {
   // Imported nodes win on a shared id (they are the ones being positioned right now);
   // existing ones are here so a pipe reaching onto the canvas can still find geometry.
   const byId = new Map<string, Node>([...existingNodes, ...nodes].map((n) => [n.id, n as Node]))

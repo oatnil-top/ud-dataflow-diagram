@@ -23,17 +23,20 @@ export { graphToText } from './utils/graphToText'
 export {
   DATAFLOW_COPY_PROMPT,
   DATAFLOW_SYSTEM_PROMPT,
-  buildCopyPrompt,
-  type CopyPrompt,
+  buildGraphForEditing,
+  type GraphForEditing,
 } from './utils/graphToPrompt'
 export { graphToContext, type GraphContext } from './utils/graphToContext'
-export { extractGraphJson, looksLikeGraphPayload, type ExtractFailure } from './utils/extractJson'
+export { extractGraphJson, looksLikeGraphPayload, unwrapModelText, type ExtractFailure } from './utils/extractJson'
+export { parseDsl, type EditPlan, type EditOp, type BadLine } from './store/dslParser'
+export { type ViewportRect } from './store/editPlan'
 export {
   importPastedGraph,
   clipboardTextIsGraph,
   PASTE_FAILURE_KEYS,
   type PasteFailure,
   type PasteOutcome,
+  type PasteViewport,
 } from './store/pasteImport'
 export { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio'
 export {

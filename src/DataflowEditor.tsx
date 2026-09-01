@@ -1,6 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, Save, Download, FileDown, MessageSquareText, BotMessageSquare, Image } from 'lucide-react';
+import { X, Loader2, Save, Download, FileDown, MessageSquareText, BotMessageSquare, ClipboardCopy, Image } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   AlertDialog,
@@ -14,7 +14,7 @@ import {
 } from './ui/alert-dialog';
 import DataflowCanvas, { type DataflowCanvasRef } from './DataflowCanvas';
 import { embedJsonInPng, captureCanvasToBlob } from './utils/pngEncoder';
-import { buildCopyPrompt } from './utils/graphToPrompt';
+import { DATAFLOW_COPY_PROMPT, buildGraphForEditing } from './utils/graphToPrompt';
 import { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio';
 import { graphToText } from './utils/graphToText';
 import './index.css';
@@ -211,20 +211,32 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
     notify('info', t('resources.dataflow.editor.drawioExported'));
   }, [t, notify]);
 
-  // The prompt goes out with the current diagram attached (ids and all), so the chat can
-  // be asked to ADD to what is on screen. Same behaviour as the playground toolbar —
-  // buildCopyPrompt is the single source for both.
+  // The teaching material alone, no diagram attached — see utils/graphToPrompt.ts for why
+  // the two were split. Same behaviour as the playground toolbar; both read the same const.
   const handleCopyPrompt = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(DATAFLOW_COPY_PROMPT);
+      notify('info', t('resources.dataflow.promptCopied'));
+    } catch (error) {
+      notify('error', t('common.status.error'), error);
+    }
+  }, [t, notify]);
+
+  // The companion button: the current diagram, for the requests that need its ids
+  // ("connect products to orders"). Separate because most requests do not.
+  const handleCopyGraphForEditing = useCallback(async () => {
     if (!flowStoreRef.current) return;
     const state = flowStoreRef.current.getState();
-    const prompt = buildCopyPrompt(state.nodes, state.pipes);
+    const graph = buildGraphForEditing(state.nodes, state.pipes);
+    if (graph.nodeCount === 0) {
+      notify('info', t('resources.dataflow.graphForEditingEmpty'));
+      return;
+    }
     try {
-      await navigator.clipboard.writeText(prompt.text);
-      notify('info', prompt.contextNodes === 0
-        ? t('resources.dataflow.promptCopied')
-        : t(prompt.degraded
-            ? 'resources.dataflow.paste.promptCopiedTrimmed'
-            : 'resources.dataflow.paste.promptCopiedWithGraph', { n: prompt.contextNodes }));
+      await navigator.clipboard.writeText(graph.text);
+      notify('info', t(graph.degraded
+        ? 'resources.dataflow.paste.graphForEditingTrimmed'
+        : 'resources.dataflow.paste.graphForEditingCopied', { n: graph.nodeCount }));
     } catch (error) {
       notify('error', t('common.status.error'), error);
     }
@@ -266,6 +278,9 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
           )}
           <Button variant="ghost" size="sm" onClick={handleCopyPrompt} disabled={busy} title={t('resources.dataflow.copyPrompt')}>
             <MessageSquareText className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleCopyGraphForEditing} disabled={busy} title={t('resources.dataflow.copyGraphForEditing')}>
+            <ClipboardCopy className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="sm" onClick={handleCopyForAI} disabled={busy} title={t('resources.dataflow.copyForAI')}>
             <BotMessageSquare className="h-4 w-4" />

@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileJson, Download, Upload, Trash2, Play, Sparkles, MessageSquareText, BotMessageSquare, Undo2, Redo2 } from 'lucide-react'
+import { FileJson, Download, Upload, Trash2, Play, Sparkles, MessageSquareText, BotMessageSquare, ClipboardCopy, Undo2, Redo2 } from 'lucide-react'
 import { useNotify } from '../../host'
 import { useFlowStore } from '../../store/flowStoreContext'
 import { importPastedGraph, PASTE_FAILURE_KEYS } from '../../store/pasteImport'
-import { buildCopyPrompt } from '../../utils/graphToPrompt'
+import type { ViewportRect } from '../../store/editPlan'
+import { DATAFLOW_COPY_PROMPT, buildGraphForEditing } from '../../utils/graphToPrompt'
 import { graphToText } from '../../utils/graphToText'
 
 // Example graph data to demonstrate the app
@@ -71,9 +72,10 @@ interface ToolbarProps {
   // Embed mode hides export/import/example buttons (they're handled by parent)
   embedMode?: boolean
   getViewportCenter?: () => { x: number; y: number }
+  getViewportRect?: () => ViewportRect
 }
 
-export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, getViewportCenter }: ToolbarProps) {
+export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, getViewportCenter, getViewportRect }: ToolbarProps) {
   const { t } = useTranslation()
   const notify = useNotify()
   const flowStore = useFlowStore()
@@ -82,6 +84,7 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
   const exportGraph = flowStore((state) => state.exportGraph)
   const importGraph = flowStore((state) => state.importGraph)
   const setImportSummary = flowStore((state) => state.setImportSummary)
+  const applyEditPlan = flowStore((state) => state.applyEditPlan)
   const clearGraph = flowStore((state) => state.clearGraph)
   const canUndo = flowStore((state) => state.canUndo)
   const canRedo = flowStore((state) => state.canRedo)
@@ -125,28 +128,35 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
     setShowExport(false)
   }
 
-  // The prompt carries the current diagram with it (ids included), because "add a
-  // payments table connected to orders" is unsayable to a model that has not been shown
-  // what `orders` is. An empty canvas gets the prompt alone.
+  // The teaching material alone — it deliberately does NOT carry the diagram (see
+  // graphToPrompt.ts). "Copy current diagram" below is the separate button for the
+  // requests that need one.
   const handleCopyPrompt = async () => {
-    const prompt = buildCopyPrompt(nodes ?? [], pipes ?? [])
     try {
-      await navigator.clipboard.writeText(prompt.text)
-      notify('info', copiedPromptMessage(prompt))
+      await navigator.clipboard.writeText(DATAFLOW_COPY_PROMPT)
+      notify('info', t('resources.dataflow.promptCopied'))
     } catch {
       notify('error', t('resources.dataflow.toolbar.copyFailed'))
     }
     setShowExport(false)
   }
 
-  const copiedPromptMessage = (prompt: { contextNodes: number; degraded: boolean }): string => {
-    if (prompt.contextNodes === 0) return t('resources.dataflow.promptCopied')
-    return t(
-      prompt.degraded
-        ? 'resources.dataflow.paste.promptCopiedTrimmed'
-        : 'resources.dataflow.paste.promptCopiedWithGraph',
-      { n: prompt.contextNodes },
-    )
+  const handleCopyGraphForEditing = async () => {
+    const graph = buildGraphForEditing(nodes ?? [], pipes ?? [])
+    if (graph.nodeCount === 0) {
+      notify('info', t('resources.dataflow.graphForEditingEmpty'))
+      setShowExport(false)
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(graph.text)
+      notify('info', t(graph.degraded
+        ? 'resources.dataflow.paste.graphForEditingTrimmed'
+        : 'resources.dataflow.paste.graphForEditingCopied', { n: graph.nodeCount }))
+    } catch {
+      notify('error', t('resources.dataflow.toolbar.copyFailed'))
+    }
+    setShowExport(false)
   }
 
   const handleCopyForAI = async () => {
@@ -166,7 +176,10 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
   // dialects refused by name, every failure named rather than closing the popover on a
   // generic toast. The summary bar reports what landed.
   const runImport = (text: string, onSuccess: () => void) => {
-    const outcome = importPastedGraph(text, { importGraph, setImportSummary }, getViewportCenter?.())
+    const outcome = importPastedGraph(text, { importGraph, applyEditPlan, setImportSummary }, {
+      center: getViewportCenter?.(),
+      rect: getViewportRect?.(),
+    })
     if (outcome.ok) onSuccess()
     else notify('error', t(PASTE_FAILURE_KEYS[outcome.reason]))
   }
@@ -265,6 +278,13 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
               >
                 <MessageSquareText size={14} />
                 {t('resources.dataflow.copyPrompt')}
+              </button>
+              <button
+                onClick={handleCopyGraphForEditing}
+                className="w-full text-left px-3 py-2 hover:bg-slate-50 rounded-lg text-sm text-slate-700 flex items-center gap-2"
+              >
+                <ClipboardCopy size={14} />
+                {t('resources.dataflow.copyGraphForEditing')}
               </button>
               <button
                 onClick={handleCopyForAI}

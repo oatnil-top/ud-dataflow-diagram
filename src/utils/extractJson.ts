@@ -33,6 +33,28 @@ export type ExtractResult =
   | { ok: true; value: unknown }
   | { ok: false; reason: ExtractFailure }
 
+/**
+ * Strip the fence and surrounding prose a chat model wraps its answer in.
+ *
+ * Promoted to a shared first layer when a second paste format arrived: the dispatcher in
+ * store/pasteImport.ts has to look at the first real character to decide JSON vs DSL, and
+ * a ```json fence would otherwise make every answer look like neither.
+ *
+ * Deliberately NOT used by extractGraphJson itself. That function does its own fence walk
+ * and keeps it, because its walk is entangled with the truncation verdict (an opened
+ * fence that never closed is how "cut off" is recognised) and the JSON branch must behave
+ * byte for byte as it did before the dispatcher existed.
+ */
+export function unwrapModelText(raw: string): string {
+  const fenced = raw.match(/```(?:[a-z]*)?\s*([\s\S]*?)```/i)
+  if (fenced) return fenced[1].trim()
+  // An opened-but-never-closed fence is a truncated answer; keep what follows the opener
+  // so the branch that knows how to report truncation gets to see it.
+  const opener = raw.match(/```(?:[a-z]*)?[^\S\n]*\n?/i)
+  if (opener) return raw.slice(opener.index! + opener[0].length).trim()
+  return raw.trim()
+}
+
 export function extractJson(raw: string): unknown | null {
   const result = extractGraphJson(raw)
   return result.ok ? result.value : null
