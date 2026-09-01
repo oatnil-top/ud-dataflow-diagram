@@ -63,6 +63,23 @@ describe('ImportSummaryBar', () => {
     expect(document.body.textContent).toContain('1 connections already existed');
   });
 
+  it('a pure pipe delta reads as connections, not as "0 nodes"', () => {
+    const store = createFlowStore();
+    store.getState().importGraph(JSON.stringify(GRAPH), undefined, { replace: true });
+    const result = store.getState().importGraph(
+      JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'users' }] }),
+      undefined, { sameIdMeansSameNode: true },
+    )!;
+    store.getState().setImportSummary(result);
+
+    renderWith(store);
+    expect(screen.getByText(/Imported 1 connections/)).toBeInTheDocument();
+    // "Imported 0 nodes and 1 connections" is true and unreadable; the bar must not say it.
+    expect(document.body.textContent).not.toContain('0 nodes');
+    expect(document.body.textContent).not.toContain('resources.dataflow');
+    expect(document.body.textContent).not.toContain('{{');
+  });
+
   it('names the missing endpoint of a dropped connection', () => {
     const store = createFlowStore();
     const result = store.getState().importGraph(

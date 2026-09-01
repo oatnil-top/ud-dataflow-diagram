@@ -73,6 +73,8 @@ If a "Current graph" section is provided below, that is what is already on my ca
   nodes. Repeating one is harmless (it is recognised by id and skipped) but it wastes
   your output space, and running out of space mid-answer is the one failure I cannot
   recover from.
+- Adding only a relationship between two nodes that are already there? Then send
+  "nodes": [] and put the connection in "pipes". That alone is a complete answer.
 
 ## Example
 

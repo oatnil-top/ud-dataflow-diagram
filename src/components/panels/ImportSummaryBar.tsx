@@ -47,7 +47,11 @@ export default function ImportSummaryBar() {
         <span className="font-medium">
           {nothingHappened
             ? t('resources.dataflow.paste.nothingAdded')
-            : t('resources.dataflow.paste.added', { nodes: addedNodes, pipes: addedPipes })}
+            // A pure pipe delta ("only connect these two") legitimately adds zero nodes;
+            // "Imported 0 nodes and 1 connections" is true and reads like a failure.
+            : addedNodes === 0
+              ? t('resources.dataflow.paste.addedPipesOnly', { pipes: addedPipes })
+              : t('resources.dataflow.paste.added', { nodes: addedNodes, pipes: addedPipes })}
         </span>
         {notes.length > 0 && (
           <span style={{ color: '#64748b' }}>{` · ${notes.join(' · ')}`}</span>

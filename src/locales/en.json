@@ -189,6 +189,7 @@
   },
   "paste": {
     "added": "Imported {{nodes}} nodes and {{pipes}} connections",
+    "addedPipesOnly": "Imported {{pipes}} connections",
     "nothingAdded": "Nothing new to add — everything in that output is already on the canvas",
     "skippedNodes": "{{n}} already on the canvas, skipped",
     "skippedPipes": "{{n}} connections already existed",
@@ -198,7 +199,7 @@
     "truncated": "That output is incomplete — it looks like it was cut off. Go back to the chat and ask it to output the complete JSON again, or continue the answer and paste both parts together.",
     "noJson": "No diagram JSON found in what you pasted. Copy the prompt again (Export → Copy as Prompt), run it in your AI chat, and paste the answer back.",
     "malformed": "Found something that looks like JSON, but it could not be read. Ask the chat to output the JSON again on its own, with nothing before or after it.",
-    "notAGraph": "That JSON is valid but contains no nodes to import. It needs a \"nodes\" array — copy the prompt again and let the AI regenerate it.",
+    "notAGraph": "That JSON is valid but contains nothing to import. It needs a \"nodes\" array — or, to only add connections between nodes already on the canvas, a \"pipes\" array.",
     "promptCopiedWithGraph": "Prompt copied, including your current diagram ({{n}} nodes)",
     "promptCopiedTrimmed": "Prompt copied with your current diagram ({{n}} nodes) — example values were left out to keep it short"
   },

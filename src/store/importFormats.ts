@@ -42,6 +42,12 @@ import { sortNodesParentsFirst } from '../utils/nodeOrder'
  * 2026-09-01 — "json 是可读可写,可复现幂等" — importing one payload twice
  * must leave the same graph as importing it once.
  *
+ * The same flag also decides what an EMPTY `nodes` means. On the paste path it means
+ * "only add these connections" — the delta a model writes when the new thing is a wire
+ * between two nodes already on screen, which is the second half of master's "添加节点和
+ * 关联" (2026-09-01). Everywhere else it still means "this document is an empty diagram"
+ * and the payload is refused, as it always was.
+ *
  * ⛔ It is off by default and MUST stay off for replace-mode opens and for
  * `ud apply` whole-document replacement. Leaking it there would change what
  * opening an existing file does, which is the one symptom nobody tests for.
@@ -57,10 +63,14 @@ export interface ImportContext {
   /** When set, imported top-level nodes are centered on this canvas point */
   viewportCenter?: { x: number; y: number }
   /**
-   * Paste-entry-point semantics: an incoming node id that matches a canvas node
-   * IS that node — skip it, resolve its pipes to the one on screen, and drop
-   * pipes whose endpoints exist nowhere. See the file header for why this is
-   * opt-in and what must never turn it on.
+   * Paste-entry-point semantics — one flag, because these three rules are the same
+   * reading of the payload ("this is a delta onto what is on screen") and any one of
+   * them leaking onto a replace-mode open changes what opening a file does:
+   *   1. an incoming node id that matches a canvas node IS that node — skip it and
+   *      resolve its pipes to the one on screen;
+   *   2. a pipe whose endpoints exist nowhere is dropped and counted, not stored unseen;
+   *   3. a payload with no nodes at all is a pure pipe delta, not an empty diagram.
+   * See the file header for why this is opt-in and what must never turn it on.
    */
   sameIdMeansSameNode?: boolean
 }
@@ -116,7 +126,21 @@ export function parseImportedGraph(data: {
 }, ctx: ImportContext): ParsedGraph | null {
   const rawNodes = (data.nodes || []) as Node[]
   const rawPipes = (data.pipes || data.edges || []) as Pipe[]
-  if (rawNodes.length === 0) return null
+  // A payload with no nodes means two opposite things depending on who is asking, so the
+  // reading is taken from the same flag that already forks this parser:
+  //
+  //  - paste path — "only add these connections". The prompt tells the model to output
+  //    ONLY what is new, and when the new thing is a connection between two nodes already
+  //    on the canvas, `nodes` is legitimately empty. Refusing it broke the second half of
+  //    master's "添加节点和关联" (2026-09-01).
+  //  - every other path (replace-mode open, `ud apply` whole-document replacement) —
+  //    "this document is an empty diagram". Importing a pipe list into a canvas that is
+  //    about to be discarded would attach wires to nodes that are on their way out.
+  //
+  // So a nodeless payload is importable only when it is a delta AND actually carries
+  // connections; an empty-everything payload stays refused on every path.
+  const isPipeDelta = ctx.sameIdMeansSameNode === true && rawNodes.length === 0 && rawPipes.length > 0
+  if (rawNodes.length === 0 && !isPipeDelta) return null
   if (detectLegacyDialect(data)) return null
   // Graph-level `direction` is the one intent word the format accepts.
   // LR is the DEFAULT (owner, 2026-08-26: "横着从左往右阅读比较好,从上往下,

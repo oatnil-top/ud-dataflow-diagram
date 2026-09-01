@@ -80,19 +80,39 @@ export function extractGraphJson(raw: string): ExtractResult {
  * Does this parsed value look like a graph someone meant to import?
  *
  * Used by the canvas Ctrl+V path, where the alternative reading is "the user wanted to
- * keep this text as a note". Deliberately narrow: a `nodes` array whose first entry is an
- * object carrying BOTH `type` and `data` — the shape only the editor's own format has.
- * A hand-written config, an API response, a package.json: none of them match, and any
- * miss is one Ctrl+Z away (the import pushes an undo snapshot).
+ * keep this text as a note". Deliberately narrow, in two accepted shapes — the two things
+ * the copy-prompt asks a model to produce, and nothing wider:
+ *
+ *  1. a `nodes` array whose first entry carries BOTH `type` and `data`;
+ *  2. a pure pipe delta — no nodes, and a `pipes`/`edges` array whose first entry carries
+ *     string `source` and `target`. "Only add a connection" has no nodes to recognise it
+ *     by, so without this the most natural paste of the most common delta becomes a note.
+ *
+ * A hand-written config, an API response, a package.json: none match. Neither do the
+ * edge lists other tools write — GraphQL connections ({node, cursor}), ELK/dagre
+ * ({sources, targets}) and Cytoscape ({data: {source, target}}) all miss shape 2, which
+ * is why it insists on top-level strings. Any miss is one Ctrl+Z away (the import pushes
+ * an undo snapshot) and the summary bar says what happened.
  */
 export function looksLikeGraphPayload(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false
   const nodes = (value as { nodes?: unknown }).nodes
-  if (!Array.isArray(nodes) || nodes.length === 0) return false
-  const first = nodes[0]
+  if (Array.isArray(nodes) && nodes.length > 0) {
+    const first = nodes[0]
+    if (!first || typeof first !== 'object') return false
+    const node = first as { type?: unknown; data?: unknown }
+    return typeof node.type === 'string' && !!node.data && typeof node.data === 'object'
+  }
+  // Shape 2 — only reachable when there are no nodes at all, so a real graph whose first
+  // node is malformed still gets rejected above rather than rescued by its edge list.
+  if (nodes !== undefined && !Array.isArray(nodes)) return false
+  const v = value as { pipes?: unknown; edges?: unknown }
+  const pipes = Array.isArray(v.pipes) ? v.pipes : Array.isArray(v.edges) ? v.edges : null
+  if (!pipes || pipes.length === 0) return false
+  const first = pipes[0]
   if (!first || typeof first !== 'object') return false
-  const node = first as { type?: unknown; data?: unknown }
-  return typeof node.type === 'string' && !!node.data && typeof node.data === 'object'
+  const pipe = first as { source?: unknown; target?: unknown }
+  return typeof pipe.source === 'string' && typeof pipe.target === 'string'
 }
 
 // ---------------------------------------------------------------------------

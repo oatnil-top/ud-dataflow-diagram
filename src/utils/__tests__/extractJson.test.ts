@@ -116,6 +116,29 @@ describe('looksLikeGraphPayload — the canvas Ctrl+V probe', () => {
     expect(eaten).toEqual([])
   })
 
+  it('accepts a pure pipe delta — a payload whose only new thing is a connection', () => {
+    expect(looksLikeGraphPayload({ nodes: [], pipes: [{ source: 'users', target: 'orders' }] })).toBe(true)
+    expect(looksLikeGraphPayload({ pipes: [{ source: 'users', target: 'orders' }] })).toBe(true)
+    expect(looksLikeGraphPayload({ edges: [{ source: 'users', target: 'orders' }] })).toBe(true)
+  })
+
+  it('rejects the connection-ish shapes other tools write', () => {
+    const notMine: unknown[] = [
+      // GraphQL connection — `edges` of {node, cursor}, no endpoints
+      { edges: [{ node: { id: 1 }, cursor: 'abc' }] },
+      // ELK / dagre layout input — plural keys, arrays not strings
+      { edges: [{ id: 'e1', sources: ['a'], targets: ['b'] }] },
+      // Cytoscape — endpoints nested under `data`
+      { edges: [{ data: { source: 'a', target: 'b' } }] },
+      // A route table: the words are there, the shape is not
+      { pipes: ['a', 'b'] },
+      { edges: [] },
+      { pipes: [{ source: 'a' }] },
+      { pipes: [{ source: 1, target: 2 }] },
+    ]
+    expect(notMine.filter(looksLikeGraphPayload)).toEqual([])
+  })
+
   it('rejects null and primitives without throwing', () => {
     expect(looksLikeGraphPayload(null)).toBe(false)
     expect(looksLikeGraphPayload(42)).toBe(false)

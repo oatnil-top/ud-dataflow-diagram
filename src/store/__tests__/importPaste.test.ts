@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { createFlowStore } from '../flowStore'
+import { importPastedGraph, clipboardTextIsGraph } from '../pasteImport'
 
 /**
  * The paste channel's two load-bearing promises, and the one regression it could cause.
@@ -213,5 +214,179 @@ describe('importGraph return value', () => {
     expect(store.getState().importGraph('not json')).toBeNull()
     expect(store.getState().importGraph(JSON.stringify({ nodes: [] }))).toBeNull()
     expect(store.getState().importGraph(JSON.stringify({ groups: [{ name: 'g' }] }))).toBeNull()
+  })
+})
+
+/**
+ * A payload that adds only connections — `nodes` empty (or absent), `pipes` non-empty.
+ *
+ * This is not an extra format: it is what the prompt's own "only output what is NEW"
+ * contract produces when the new thing IS a connection, and master named it in the same
+ * breath as the rest ("添加节点和关联", 2026-09-01). Until now importFormats refused it
+ * outright, so half that sentence did not work.
+ *
+ * The refusal only lifts on the paste path. On a replace-mode open and on `ud apply`
+ * whole-document replacement an empty `nodes` means "this is an empty diagram", not
+ * "just add a wire" — the same semantic fork the same-id rule had to stay out of.
+ */
+describe('a pure pipe delta — only add a connection', () => {
+  /** Three tables already on the canvas, wired users → orders. `payments` is unconnected. */
+  const seed = () => {
+    const store = createFlowStore()
+    store.getState().importGraph(JSON.stringify(ECHO_PLUS_PAYMENTS), undefined, { replace: true })
+    // Drop the second pipe so there is room for the delta to add it back.
+    store.getState().removeSelection([], [store.getState().pipes[1].id])
+    return store
+  }
+
+  it('lands on the canvas when both endpoints are nodes already there', () => {
+    const store = seed()
+    const before = store.getState().pipes.length
+    const result = store.getState().importGraph(
+      JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] }), undefined, paste,
+    )
+
+    expect(result).toMatchObject({ addedNodes: 0, addedPipes: 1 })
+    expect(store.getState().pipes).toHaveLength(before + 1)
+    expect(store.getState().pipes.map((p) => [p.source, p.target])).toContainEqual(['orders', 'payments'])
+    // No node was invented to carry it.
+    expect(store.getState().nodes.map((n) => n.id)).toEqual(['users', 'orders', 'payments'])
+  })
+
+  it('works with the `nodes` key absent entirely, and with `edges` instead of `pipes`', () => {
+    for (const payload of [
+      { pipes: [{ source: 'orders', target: 'payments' }] },
+      { nodes: [], edges: [{ source: 'orders', target: 'payments' }] },
+    ]) {
+      const store = seed()
+      const result = store.getState().importGraph(JSON.stringify(payload), undefined, paste)
+      expect(result).toMatchObject({ addedPipes: 1 })
+      expect(store.getState().pipes.map((p) => [p.source, p.target])).toContainEqual(['orders', 'payments'])
+    }
+  })
+
+  it('is idempotent — pasting it twice leaves what pasting it once left', () => {
+    const store = seed()
+    const payload = JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] })
+    store.getState().importGraph(payload, undefined, paste)
+    const once = shape(store)
+
+    const second = store.getState().importGraph(payload, undefined, paste)
+
+    expect(shape(store)).toEqual(once)
+    expect(second).toMatchObject({ addedPipes: 0, skippedPipes: 1 })
+  })
+
+  it('a re-paste touches history no more than it touches the graph', () => {
+    const store = seed()
+    const payload = JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] })
+    store.getState().importGraph(payload, undefined, paste)
+    const afterFirst = shape(store)
+
+    store.getState().importGraph(payload, undefined, paste)
+    store.getState().undo()
+
+    // One undo goes back past the FIRST import, not past a no-op snapshot the second left.
+    expect(shape(store)).not.toEqual(afterFirst)
+    expect(store.getState().pipes.map((p) => [p.source, p.target])).not.toContainEqual(['orders', 'payments'])
+  })
+
+  describe('when an endpoint id does not exist', () => {
+    const TYPO = { nodes: [], pipes: [{ source: 'orders', target: 'paymnets' }] }
+
+    it('the connection is dropped and counted by name — never silently swallowed', () => {
+      const store = seed()
+      const before = shape(store)
+      const result = store.getState().importGraph(JSON.stringify(TYPO), undefined, paste)
+
+      expect(result).toMatchObject({ addedNodes: 0, addedPipes: 0 })
+      expect(result!.droppedPipes).toEqual([{ source: 'orders', target: 'paymnets' }])
+      // The graph is untouched: a delta that reaches nothing changes nothing.
+      expect(shape(store)).toEqual(before)
+    })
+
+    it('still returns a result, so the summary bar can say it out loud', () => {
+      const store = seed()
+      // null would mean "nothing importable" and the entry points would show the generic
+      // notAGraph error instead of "dropped 1 connection: no node named paymnets".
+      expect(store.getState().importGraph(JSON.stringify(TYPO), undefined, paste)).not.toBeNull()
+    })
+  })
+
+  describe('the empty-graph meaning is unchanged everywhere else', () => {
+    it('a replace-mode open of a nodeless payload is still refused', () => {
+      const store = seed()
+      const before = shape(store)
+      expect(store.getState().importGraph(
+        JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] }), undefined, { replace: true },
+      )).toBeNull()
+      expect(shape(store)).toEqual(before)
+    })
+
+    it('replace still wins when a caller wrongly passes both flags', () => {
+      const store = seed()
+      const before = shape(store)
+      expect(store.getState().importGraph(
+        JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] }),
+        undefined, { replace: true, sameIdMeansSameNode: true },
+      )).toBeNull()
+      expect(shape(store)).toEqual(before)
+    })
+
+    it('a plain merge (no paste flag — the `ud apply` shape) is still refused', () => {
+      const store = seed()
+      expect(store.getState().importGraph(
+        JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] }),
+      )).toBeNull()
+    })
+
+    it('an actually empty payload is refused on the paste path too', () => {
+      const store = seed()
+      expect(store.getState().importGraph(JSON.stringify({ nodes: [], pipes: [] }), undefined, paste)).toBeNull()
+      expect(store.getState().importGraph(JSON.stringify({ nodes: [] }), undefined, paste)).toBeNull()
+    })
+
+    it('a retired dialect carrying pipes is still refused by name, not imported', () => {
+      const store = seed()
+      expect(store.getState().importGraph(
+        JSON.stringify({ nodes: [], groups: [{ name: 'g' }], pipes: [{ source: 'orders', target: 'payments' }] }),
+        undefined, paste,
+      )).toBeNull()
+    })
+  })
+})
+
+/**
+ * The pure pipe delta as a user actually meets it: fenced chat output, pasted into any of
+ * the three entry points. They share importPastedGraph, so this covers all three; the
+ * canvas Ctrl+V path additionally has to RECOGNISE it, which is the clipboardTextIsGraph
+ * assertion — without that the most natural paste of the most common delta becomes a note.
+ */
+describe('a pure pipe delta arriving the way a chat writes it', () => {
+  const CHAT_ANSWER = [
+    '当然可以,只需要加一条连线:',
+    '```json',
+    JSON.stringify({ nodes: [], pipes: [{ source: 'orders', target: 'payments' }] }, null, 2),
+    '```',
+    '这样 orders 就指向 payments 了。',
+  ].join('\n')
+
+  it('unwraps, imports, and shows up in the summary', () => {
+    const store = createFlowStore()
+    store.getState().importGraph(JSON.stringify(ECHO_PLUS_PAYMENTS), undefined, { replace: true })
+    store.getState().removeSelection([], [store.getState().pipes[1].id])
+
+    const outcome = importPastedGraph(CHAT_ANSWER, {
+      importGraph: store.getState().importGraph,
+      setImportSummary: store.getState().setImportSummary,
+    })
+
+    expect(outcome).toMatchObject({ ok: true, result: { addedNodes: 0, addedPipes: 1 } })
+    expect(store.getState().pipes.map((p) => [p.source, p.target])).toContainEqual(['orders', 'payments'])
+    expect(store.getState().importSummary).toMatchObject({ addedPipes: 1 })
+  })
+
+  it('is recognised by the canvas Ctrl+V probe rather than kept as a note', () => {
+    expect(clipboardTextIsGraph(CHAT_ANSWER)).toBe(true)
   })
 })
