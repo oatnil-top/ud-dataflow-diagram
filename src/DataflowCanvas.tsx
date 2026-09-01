@@ -37,7 +37,7 @@ import { FlowStoreContext } from './store/flowStoreContext'
 import { DiagramContext, type DiagramContextValue } from './diagramContext'
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts'
 import { useCanvasPaste } from './hooks/useCanvasPaste'
-import { computeGroupDropUpdates } from './utils/groupDrop'
+import { computeGroupDropUpdates, applyGroupDropUpdates } from './utils/groupDrop'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
 import { nodeTypes, edgeTypes } from './registry'
 import { useCollapsedNoteEdges, NOTE_EDGE_REVEALED } from './hooks/useCollapsedNoteEdges'
@@ -267,18 +267,11 @@ function Flow({ store, embedMode }: FlowProps) {
 
     if (updates.size === 0) return
 
-    // Apply all updates in a single setState call
+    // Apply all updates in a single setState call. applyGroupDropUpdates also
+    // reorders the array so parents stay ahead of their children — React Flow
+    // will not resolve a nested group's position otherwise (utils/nodeOrder.ts).
     store.setState((state) => ({
-      nodes: state.nodes.map((n) => {
-        const update = updates.get(n.id)
-        if (!update) return n
-        return {
-          ...n,
-          parentId: update.parentId,
-          position: update.position,
-          ...(update.clearExtent ? { extent: undefined } : {}),
-        }
-      }),
+      nodes: applyGroupDropUpdates(state.nodes, updates),
     }))
   }, [getNodes, store])
 

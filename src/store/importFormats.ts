@@ -2,6 +2,7 @@ import type { Node } from '@xyflow/react'
 import type { AnyNode, Pipe } from './flowStore'
 import type { Field, JsonNodeData, OutputField, ProcessNodeData } from '../types'
 import { generateId } from '../types'
+import { sortNodesParentsFirst } from '../utils/nodeOrder'
 
 /**
  * Parser for the one JSON format accepted by importGraph: the full React Flow
@@ -226,20 +227,10 @@ function parseReactFlowFormat(
     }
   }
 
-  // Groups must come before their children (React Flow requirement).
-  // Depth-based sort handles multi-level nesting; depths are memoized so the
-  // sort stays O(n log n) instead of walking the parent chain per comparison.
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-  const depthCache = new Map<string, number>()
-  const depthOf = (nodeId: string): number => {
-    const cached = depthCache.get(nodeId)
-    if (cached !== undefined) return cached
-    const node = byId.get(nodeId)
-    const depth = node?.parentId ? depthOf(node.parentId) + 1 : 0
-    depthCache.set(nodeId, depth)
-    return depth
-  }
-  nodes.sort((a, b) => depthOf(a.id) - depthOf(b.id))
+  // Groups must come before their children (React Flow requirement) —
+  // utils/nodeOrder.ts explains what breaks when they do not. Sorted in place
+  // because the rest of this function keeps reading `nodes`.
+  nodes.splice(0, nodes.length, ...sortNodesParentsFirst(nodes))
 
   // Backward-compat: remap old handle IDs to the unified node-* pattern
   const remapHandle = (handle: string | undefined): string | undefined => {

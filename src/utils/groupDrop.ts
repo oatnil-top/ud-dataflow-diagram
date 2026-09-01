@@ -1,4 +1,5 @@
 import type { Node } from '@xyflow/react'
+import { sortNodesParentsFirst } from './nodeOrder'
 
 export interface GroupDropUpdate {
   parentId: string | undefined
@@ -109,4 +110,34 @@ export function computeGroupDropUpdates(
   }
 
   return updates
+}
+
+/**
+ * Apply the drop updates to the nodes array, parents first.
+ *
+ * Writing `parentId` is only half the move: React Flow also needs the parent to
+ * sit ahead of the child in the array (see utils/nodeOrder.ts). `addGroupNode`
+ * prepends, so the newer of two groups is always at a lower index — dropping it
+ * into an older group put the child in front of its parent every time, and the
+ * nested group painted at its parent-relative coordinates as if they were
+ * absolute. The relationship itself was stored correctly, so a reload — which
+ * sorts on the way in — showed it in the right place, which is what made the
+ * bug look like it came and went.
+ */
+export function applyGroupDropUpdates<T extends Node>(
+  nodes: T[],
+  updates: Map<string, GroupDropUpdate>,
+): T[] {
+  if (updates.size === 0) return nodes
+  const next = nodes.map((n) => {
+    const update = updates.get(n.id)
+    if (!update) return n
+    return {
+      ...n,
+      parentId: update.parentId,
+      position: update.position,
+      ...(update.clearExtent ? { extent: undefined } : {}),
+    }
+  })
+  return sortNodesParentsFirst(next)
 }
