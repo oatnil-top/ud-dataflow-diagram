@@ -130,8 +130,52 @@ export interface FlowState {
 
   // Export/Import
   exportGraph: () => string
-  importGraph: (json: string, viewportCenter?: { x: number; y: number }, opts?: { replace?: boolean }) => boolean
+  /**
+   * Returns null when nothing importable was found — so `if (importGraph(...))` reads
+   * the same as it did when this returned a boolean — and an ImportResult otherwise.
+   * See ImportResult for what the caller is expected to do with it.
+   */
+  importGraph: (json: string, viewportCenter?: { x: number; y: number }, opts?: ImportOptions) => ImportResult | null
   clearGraph: () => void
+
+  /**
+   * The last paste-path import, for the summary bar to render and dismiss.
+   *
+   * Store state rather than a return value the entry points thread into a component,
+   * because three entry points (GraphImportPanel, Toolbar, canvas Ctrl+V) produce it and
+   * one bar renders it. Set only by callers that actually paste — loading the built-in
+   * example and the in-app AI panel keep their own toasts and leave this alone.
+   */
+  importSummary: ImportResult | null
+  setImportSummary: (summary: ImportResult | null) => void
+}
+
+export interface ImportOptions {
+  /** Replace the canvas instead of merging into it (opening a document). */
+  replace?: boolean
+  /**
+   * Paste semantics: an incoming id that names a canvas node IS that node.
+   * ⛔ Never set together with `replace` — see importFormats.ts's file header.
+   */
+  sameIdMeansSameNode?: boolean
+}
+
+/**
+ * What one import did, in the terms the user is owed after pasting something a model
+ * wrote: what landed, what was already there, and what could not be connected. Partial
+ * success is deliberate — the import pushes an undo snapshot, so nine nodes out of ten
+ * plus a visible count beats refusing all ten and charging the user another round trip
+ * through their chat window (design fb629b6a §Q3).
+ */
+export interface ImportResult {
+  addedNodes: number
+  addedPipes: number
+  /** Nodes the canvas already had under the same id. */
+  skippedNodes: number
+  /** Connections the canvas already had, endpoints and anchors alike. */
+  skippedPipes: number
+  /** Connections whose endpoints exist neither in the payload nor on the canvas. */
+  droppedPipes: { source: string; target: string }[]
 }
 
 export type FlowStore = UseBoundStore<StoreApi<FlowState>>
@@ -937,6 +981,10 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       return JSON.stringify({ nodes: cleanNodes, pipes: cleanPipes }, null, 2)
     },
 
+    importSummary: null,
+
+    setImportSummary: (summary) => set({ importSummary: summary }),
+
     importGraph: (json, viewportCenter, opts) => {
       const replace = opts?.replace ?? false
       // Parse and convert BEFORE touching history — a failed import must not
@@ -954,25 +1002,39 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
           existingNodes: replace ? [] : get().nodes,
           existingPipes: replace ? [] : get().pipes,
           viewportCenter,
+          // Replace wins if a caller ever sets both: an open must never gain paste
+          // semantics (importFormats.ts file header).
+          sameIdMeansSameNode: !replace && (opts?.sameIdMeansSameNode ?? false),
         })
       } catch (e) {
         console.error('Failed to import graph:', e)
-        return false
+        return null
       }
-      if (!parsed) return false
+      if (!parsed) return null
+
+      const result: ImportResult = {
+        addedNodes: parsed.nodes.length,
+        addedPipes: parsed.pipes.length,
+        skippedNodes: parsed.skippedNodes,
+        skippedPipes: parsed.skippedPipes,
+        droppedPipes: parsed.droppedPipes,
+      }
 
       if (replace) {
         // Initial document load: replace content wholesale, no undo entry
         set({ nodes: parsed.nodes, pipes: parsed.pipes })
         resetHistory()
-      } else {
+      } else if (parsed.nodes.length > 0 || parsed.pipes.length > 0) {
         pushSnapshot()
         set({
           nodes: [...get().nodes, ...parsed.nodes],
           pipes: [...get().pipes, ...parsed.pipes],
         })
       }
-      return true
+      // An import that adds nothing (every node was already here — what re-importing the
+      // same payload does) touches neither the graph nor the history: no snapshot, no
+      // dirty flag. That is what makes importing twice equal importing once.
+      return result
     },
 
     clearGraph: () => {

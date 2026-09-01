@@ -28,6 +28,23 @@ import { sortNodesParentsFirst } from '../utils/nodeOrder'
  * open, so a stored document round-trips its ids byte-for-byte) and earlier
  * entries of the same import (a document that duplicates an id inside itself
  * keeps the first occurrence; references resolve to that first occurrence).
+ *
+ * ctx.sameIdMeansSameNode flips ONE of those two clauses and only for the
+ * paste entry points: an incoming id that collides with a CANVAS node is then
+ * the same node — skipped, with its pipes resolving to the node already there.
+ * Within-document duplicates are untouched by the flag and still re-mint, so
+ * f5063687's criterion 4 (a document carrying repeated ids must not break)
+ * holds identically on every path.
+ *
+ * The flag exists because a chat model asked to extend a diagram echoes what
+ * it was shown (design fb629b6a §5 out⑥, 3/3 nodes echoed), and re-minting
+ * those gives the user two of everything. Its real job is idempotence: master,
+ * 2026-09-01 — "json 是可读可写,可复现幂等" — importing one payload twice
+ * must leave the same graph as importing it once.
+ *
+ * ⛔ It is off by default and MUST stay off for replace-mode opens and for
+ * `ud apply` whole-document replacement. Leaking it there would change what
+ * opening an existing file does, which is the one symptom nobody tests for.
  */
 
 export interface ImportContext {
@@ -39,11 +56,27 @@ export interface ImportContext {
   existingPipes?: Pipe[]
   /** When set, imported top-level nodes are centered on this canvas point */
   viewportCenter?: { x: number; y: number }
+  /**
+   * Paste-entry-point semantics: an incoming node id that matches a canvas node
+   * IS that node — skip it, resolve its pipes to the one on screen, and drop
+   * pipes whose endpoints exist nowhere. See the file header for why this is
+   * opt-in and what must never turn it on.
+   */
+  sameIdMeansSameNode?: boolean
 }
 
 export interface ParsedGraph {
   nodes: AnyNode[]
   pipes: Pipe[]
+  /**
+   * What did not make it in, so the entry point can show it rather than let the
+   * user count nodes. All zero/empty unless ctx.sameIdMeansSameNode is set —
+   * nothing is skipped or dropped on the other paths.
+   */
+  skippedNodes: number
+  skippedPipes: number
+  /** Pipes whose endpoints matched no node here and none on the canvas. */
+  droppedPipes: { source: string; target: string }[]
 }
 
 /**
@@ -143,10 +176,20 @@ export function ensureNodeFieldIds(node: AnyNode): void {
   }
 }
 
-/** Shift top-level nodes so their centroid lands on the viewport center */
-function centerOnViewport(nodes: Node[], viewportCenter?: { x: number; y: number }): void {
+/**
+ * Shift top-level nodes so their centroid lands on the viewport center.
+ *
+ * `anchored` names nodes that were already given a spot relative to something on the
+ * canvas — they are excluded from both the centroid and the shift, because moving them
+ * would undo the placement that put them next to their neighbor.
+ */
+function centerOnViewport(
+  nodes: Node[],
+  viewportCenter?: { x: number; y: number },
+  anchored?: Set<string>,
+): void {
   if (!viewportCenter) return
-  const topLevel = nodes.filter((n) => !n.parentId)
+  const topLevel = nodes.filter((n) => !n.parentId && !anchored?.has(n.id))
   if (topLevel.length === 0) return
   const cx = topLevel.reduce((s, n) => s + n.position.x, 0) / topLevel.length
   const cy = topLevel.reduce((s, n) => s + n.position.y, 0) / topLevel.length
@@ -173,6 +216,17 @@ function parseReactFlowFormat(
   direction: LayoutDirection = 'LR',
 ): ParsedGraph {
   const offsetX = mergeOffsetX(ctx)
+  const existingIds = new Set(ctx.existingNodes.map((n) => n.id))
+
+  // Paste mode only: an incoming id that names a canvas node is that node. Those
+  // entries are set aside here — before ids, layout or pipes are computed — so the
+  // rest of this function simply never sees them. Within-document duplicates are NOT
+  // filtered here; they still fall through to the allocator (file header).
+  const skipped = ctx.sameIdMeansSameNode
+    ? rawNodes.filter((n) => typeof n.id === 'string' && existingIds.has(n.id))
+    : []
+  const skippedIds = new Set(skipped.map((n) => n.id))
+  const incoming = skippedIds.size > 0 ? rawNodes.filter((n) => !skippedIds.has(n.id)) : rawNodes
 
   // Geometry is optional. A graph with NO positions at all (the shape the
   // prompts teach agents to write) runs through the topological solver, keyed
@@ -182,13 +236,18 @@ function parseReactFlowFormat(
   // nodes must never move because a neighbor was added; the missing ones are
   // placed next to their connected neighbors afterwards (see
   // placeUnpositionedNodes below).
+  //
+  // Skipping anything disqualifies the whole-graph solve too: the payload is then a
+  // delta onto a canvas that already has a human layout, and re-solving it would move
+  // nothing (the solver only writes the incoming nodes) while placing them as if the
+  // canvas were empty. placeUnpositionedNodes anchors them to their real neighbors.
   const positionless = (node: Node) => (node as { position?: unknown }).position == null
   const solved: Record<string, { x: number; y: number }> | null =
-    rawNodes.length > 0 && rawNodes.every(positionless)
+    incoming.length > 0 && skippedIds.size === 0 && incoming.every(positionless)
       ? computeTopologicalLayout(
-          rawNodes.map((n, i) => n.id ?? `#${i}`),
+          incoming.map((n, i) => n.id ?? `#${i}`),
           rawPipes.map((p) => ({ from: p.source, to: p.target })),
-          Object.fromEntries(rawNodes.map((n, i) => [n.id ?? `#${i}`, estimateNodeSize(n)])),
+          Object.fromEntries(incoming.map((n, i) => [n.id ?? `#${i}`, estimateNodeSize(n)])),
           direction,
         )
       : null
@@ -198,13 +257,15 @@ function parseReactFlowFormat(
   // oldToNewId is first-write-wins so edges/parentId resolve to that first
   // occurrence — deterministic, and the graph stays valid.
   const claimNodeId = createIdAllocator(ctx.existingNodes.map((n) => n.id), ctx.generateNodeId)
-  const oldToNewId: Record<string, string> = {}
+  // A skipped id maps to itself: every pipe and parentId that referenced it now
+  // resolves to the node already on the canvas.
+  const oldToNewId: Record<string, string> = Object.fromEntries([...skippedIds].map((id) => [id, id]))
   // Nodes still missing a position after the full-graph solve (the partial
   // case) get a placeholder here and are placed by neighbor after the pipes
   // are resolved — placement needs the remapped edges to know who neighbors
   // whom.
   const unplaced = new Set<string>()
-  const nodes = rawNodes.map((node, i) => {
+  const nodes = incoming.map((node, i) => {
     const newId = claimNodeId(node.id)
     if (node.id && oldToNewId[node.id] === undefined) oldToNewId[node.id] = newId
     const position = node.position ?? solved?.[node.id ?? `#${i}`]
@@ -241,15 +302,32 @@ function parseReactFlowFormat(
   }
 
   const claimPipeId = createIdAllocator((ctx.existingPipes ?? []).map((p) => p.id), ctx.generatePipeId)
-  const pipes = rawPipes.map((pipe) => ({
+  const resolved = rawPipes.map((pipe) => ({
     ...pipe,
-    id: claimPipeId(pipe.id),
     type: pipe.type || 'dataflow',
     source: oldToNewId[pipe.source] || pipe.source,
     target: oldToNewId[pipe.target] || pipe.target,
     sourceHandle: remapHandle(pipe.sourceHandle ?? undefined),
     targetHandle: remapHandle(pipe.targetHandle ?? undefined),
   }))
+
+  // Paste mode only: a pipe whose endpoints are neither being imported nor already on
+  // the canvas can never render, and today it is kept in state invisibly — which is what
+  // "the nodes arrived but the edges vanished" looks like from the outside (card
+  // f22030f3). Drop it and count it, so the summary can name the missing endpoint.
+  // Every other path keeps its dangling pipes exactly as before: dropping them on a
+  // replace-mode open would delete edges out of a stored document on its next save.
+  const droppedPipes: { source: string; target: string }[] = []
+  let kept = resolved
+  if (ctx.sameIdMeansSameNode) {
+    const reachable = new Set([...nodes.map((n) => n.id), ...ctx.existingNodes.map((n) => n.id)])
+    kept = resolved.filter((pipe) => {
+      if (reachable.has(pipe.source) && reachable.has(pipe.target)) return true
+      droppedPipes.push({ source: pipe.source, target: pipe.target })
+      return false
+    })
+  }
+  const pipes = kept.map((pipe) => ({ ...pipe, id: claimPipeId(pipe.id) }))
 
   for (const node of nodes) {
     // Strip legacy attachment data from note nodes
@@ -262,15 +340,47 @@ function parseReactFlowFormat(
     }
   }
 
-  if (unplaced.size > 0) {
-    placeUnpositionedNodes(nodes, pipes, unplaced, ctx.existingNodes, direction)
+  const anchored = unplaced.size > 0
+    ? placeUnpositionedNodes(nodes, pipes, unplaced, ctx.existingNodes, direction)
+    : new Set<string>()
+
+  // Existing canvas nodes are visible to the handle filler so that a pipe reaching from
+  // a new node to one already on screen gets anchors from real geometry. Without them
+  // that pipe's ends stay undeclared — and, because the handles are then not stable
+  // across two imports of the same payload, so does idempotence.
+  fillMissingHandles(nodes, pipes, ctx.existingNodes)
+
+  // A node that was just placed beside its neighbor on the canvas must not then be
+  // shifted to the middle of the viewport, away from the neighbor that chose its spot.
+  centerOnViewport(nodes, ctx.viewportCenter, ctx.sameIdMeansSameNode ? anchored : undefined)
+  nodes.forEach((n) => ensureNodeFieldIds(n as AnyNode))
+
+  // Deduplicate against the canvas AFTER handles are filled: an incoming pipe that omits
+  // its handles is only recognisable as "the one already there" once both ends carry the
+  // same computed anchors. This is what makes a second import of one payload a no-op.
+  let skippedPipes = 0
+  let finalPipes = pipes
+  if (ctx.sameIdMeansSameNode && (ctx.existingPipes?.length ?? 0) > 0) {
+    const onCanvas = new Set((ctx.existingPipes ?? []).map(pipeIdentity))
+    finalPipes = pipes.filter((pipe) => {
+      if (!onCanvas.has(pipeIdentity(pipe))) return true
+      skippedPipes++
+      return false
+    })
   }
 
-  fillMissingHandles(nodes, pipes)
+  return {
+    nodes: nodes as AnyNode[],
+    pipes: finalPipes,
+    skippedNodes: skipped.length,
+    skippedPipes,
+    droppedPipes,
+  }
+}
 
-  centerOnViewport(nodes, ctx.viewportCenter)
-  nodes.forEach((n) => ensureNodeFieldIds(n as AnyNode))
-  return { nodes: nodes as AnyNode[], pipes }
+/** What makes two pipes the same connection: both endpoints and both anchors. */
+function pipeIdentity(pipe: Pipe): string {
+  return [pipe.source, pipe.target, pipe.sourceHandle ?? '', pipe.targetHandle ?? ''].join('\u0000')
 }
 
 // ---------------------------------------------------------------------------
@@ -564,8 +674,10 @@ export function computeTopologicalLayout(
  * untouched. Like solved positions, filled handles materialize on the first
  * human save.
  */
-function fillMissingHandles(nodes: Node[], pipes: Pipe[]): void {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
+function fillMissingHandles(nodes: Node[], pipes: Pipe[], existingNodes: AnyNode[] = []): void {
+  // Imported nodes win on a shared id (they are the ones being positioned right now);
+  // existing ones are here so a pipe reaching onto the canvas can still find geometry.
+  const byId = new Map<string, Node>([...existingNodes, ...nodes].map((n) => [n.id, n as Node]))
   const absCenter = (n: Node): { x: number; y: number } => {
     let x = n.position.x
     let y = n.position.y
@@ -620,7 +732,9 @@ function placeUnpositionedNodes(
   unplaced: Set<string>,
   existingNodes: AnyNode[],
   direction: LayoutDirection = 'LR',
-): void {
+): Set<string> {
+  /** Nodes whose spot was chosen by a neighbor rather than by the fallback. */
+  const anchoredToNeighbor = new Set<string>()
   type Box = { x: number; y: number; width: number; height: number; space: string }
   const spaceOf = (n: { parentId?: string }) => n.parentId ?? ''
   const toBox = (n: Node | AnyNode): Box => ({
@@ -684,8 +798,10 @@ function placeUnpositionedNodes(
     }
 
     node.position = { x: box.x, y: box.y }
+    if (anchorId !== undefined) anchoredToNeighbor.add(node.id)
     occupied.push(box)
     positionedById.set(node.id, node)
     unplaced.delete(node.id)
   }
+  return anchoredToNeighbor
 }

@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { FileJson, Download, Upload, Trash2, Play, Sparkles, MessageSquareText, BotMessageSquare, Undo2, Redo2 } from 'lucide-react'
 import { useNotify } from '../../host'
 import { useFlowStore } from '../../store/flowStoreContext'
-import { detectLegacyDialect } from '../../store/importFormats'
-import { DATAFLOW_COPY_PROMPT } from '../../utils/graphToPrompt'
+import { importPastedGraph, PASTE_FAILURE_KEYS } from '../../store/pasteImport'
+import { buildCopyPrompt } from '../../utils/graphToPrompt'
 import { graphToText } from '../../utils/graphToText'
 
 // Example graph data to demonstrate the app
@@ -81,6 +81,7 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
   const pipes = flowStore((state) => state.pipes)
   const exportGraph = flowStore((state) => state.exportGraph)
   const importGraph = flowStore((state) => state.importGraph)
+  const setImportSummary = flowStore((state) => state.setImportSummary)
   const clearGraph = flowStore((state) => state.clearGraph)
   const canUndo = flowStore((state) => state.canUndo)
   const canRedo = flowStore((state) => state.canRedo)
@@ -124,14 +125,28 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
     setShowExport(false)
   }
 
+  // The prompt carries the current diagram with it (ids included), because "add a
+  // payments table connected to orders" is unsayable to a model that has not been shown
+  // what `orders` is. An empty canvas gets the prompt alone.
   const handleCopyPrompt = async () => {
+    const prompt = buildCopyPrompt(nodes ?? [], pipes ?? [])
     try {
-      await navigator.clipboard.writeText(DATAFLOW_COPY_PROMPT)
-      notify('info', t('resources.dataflow.promptCopied'))
+      await navigator.clipboard.writeText(prompt.text)
+      notify('info', copiedPromptMessage(prompt))
     } catch {
       notify('error', t('resources.dataflow.toolbar.copyFailed'))
     }
     setShowExport(false)
+  }
+
+  const copiedPromptMessage = (prompt: { contextNodes: number; degraded: boolean }): string => {
+    if (prompt.contextNodes === 0) return t('resources.dataflow.promptCopied')
+    return t(
+      prompt.degraded
+        ? 'resources.dataflow.paste.promptCopiedTrimmed'
+        : 'resources.dataflow.paste.promptCopiedWithGraph',
+      { n: prompt.contextNodes },
+    )
   }
 
   const handleCopyForAI = async () => {
@@ -147,55 +162,31 @@ export default function Toolbar({ onOpenJsonImport, onAIGenerate, embedMode, get
     setShowExport(false)
   }
 
-  // A retired dialect ({name, fields} nodes or a top-level "groups" key) gets
-  // a named rejection, not a generic failure — the user is probably holding
-  // output from an old copy-prompt and needs the way out (re-copy, regenerate).
-  // Invalid JSON falls through to importGraph's own failure toast.
-  const isLegacyDialect = (text: string): boolean => {
-    try {
-      return detectLegacyDialect(JSON.parse(text)) !== null
-    } catch {
-      return false
-    }
+  // Both entries run the shared pipeline (pasteImport.ts): fence/prose stripped, retired
+  // dialects refused by name, every failure named rather than closing the popover on a
+  // generic toast. The summary bar reports what landed.
+  const runImport = (text: string, onSuccess: () => void) => {
+    const outcome = importPastedGraph(text, { importGraph, setImportSummary }, getViewportCenter?.())
+    if (outcome.ok) onSuccess()
+    else notify('error', t(PASTE_FAILURE_KEYS[outcome.reason]))
   }
 
   const handleImport = () => {
-    if (importText.trim()) {
-      if (isLegacyDialect(importText)) {
-        notify('error', t('resources.dataflow.panel.legacyFormatRejected'))
-        return
-      }
-      const center = getViewportCenter?.()
-      // importGraph returns false on invalid JSON — silently closing the
-      // popover would leave the user with no idea the import failed
-      if (importGraph(importText, center)) {
-        setImportText('')
-        setShowImport(false)
-      } else {
-        notify('error', t('resources.dataflow.toolbar.importFailed'))
-      }
-    }
+    if (!importText.trim()) return
+    runImport(importText, () => {
+      setImportText('')
+      setShowImport(false)
+    })
   }
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const text = event.target?.result as string
-        if (isLegacyDialect(text)) {
-          notify('error', t('resources.dataflow.panel.legacyFormatRejected'))
-          return
-        }
-        const center = getViewportCenter?.()
-        if (importGraph(text, center)) {
-          setShowImport(false)
-        } else {
-          notify('error', t('resources.dataflow.toolbar.importFailed'))
-        }
-      }
-      reader.readAsText(file)
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      runImport(event.target?.result as string, () => setShowImport(false))
     }
+    reader.readAsText(file)
   }
 
   return (

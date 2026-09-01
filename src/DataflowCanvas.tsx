@@ -27,6 +27,7 @@ import CanvasMenu from './components/CanvasMenu'
 import JsonImportPanel from './components/panels/JsonImportPanel'
 import JsonlImportPanel from './components/panels/JsonlImportPanel'
 import GraphImportPanel from './components/panels/GraphImportPanel'
+import ImportSummaryBar from './components/panels/ImportSummaryBar'
 import AIGeneratePanel from './components/panels/AIGeneratePanel'
 import ProcessEditorPanel from './components/panels/ProcessEditorPanel'
 import NodeRawEditor from './components/panels/NodeRawEditor'
@@ -61,6 +62,8 @@ function Flow({ store, embedMode }: FlowProps) {
   const pasteNodesFromClipboard = store((state) => state.pasteNodesFromClipboard)
   const addJsonNode = store((state) => state.addJsonNode)
   const addNoteNode = store((state) => state.addNoteNode)
+  const importGraph = store((state) => state.importGraph)
+  const setImportSummary = store((state) => state.setImportSummary)
   const addResourceNode = store((state) => state.addResourceNode)
   const addGroupNode = store((state) => state.addGroupNode)
   const addIconNode = store((state) => state.addIconNode)
@@ -252,6 +255,8 @@ function Flow({ store, embedMode }: FlowProps) {
     updateResourceNode,
     addResourceNode,
     addNoteNode,
+    importGraph,
+    setImportSummary,
     t,
   })
 
@@ -644,6 +649,9 @@ function Flow({ store, embedMode }: FlowProps) {
           onClose={() => setGraphImportOpen(false)}
           getViewportCenter={getViewportCenter}
         />
+
+        {/* What the last paste did, and the way back out of it. */}
+        <ImportSummaryBar />
 
         {host.ai && (
           <AIGeneratePanel

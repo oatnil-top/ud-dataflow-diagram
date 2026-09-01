@@ -14,7 +14,7 @@ import {
 } from './ui/alert-dialog';
 import DataflowCanvas, { type DataflowCanvasRef } from './DataflowCanvas';
 import { embedJsonInPng, captureCanvasToBlob } from './utils/pngEncoder';
-import { DATAFLOW_COPY_PROMPT } from './utils/graphToPrompt';
+import { buildCopyPrompt } from './utils/graphToPrompt';
 import { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio';
 import { graphToText } from './utils/graphToText';
 import './index.css';
@@ -211,10 +211,20 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
     notify('info', t('resources.dataflow.editor.drawioExported'));
   }, [t, notify]);
 
+  // The prompt goes out with the current diagram attached (ids and all), so the chat can
+  // be asked to ADD to what is on screen. Same behaviour as the playground toolbar —
+  // buildCopyPrompt is the single source for both.
   const handleCopyPrompt = useCallback(async () => {
+    if (!flowStoreRef.current) return;
+    const state = flowStoreRef.current.getState();
+    const prompt = buildCopyPrompt(state.nodes, state.pipes);
     try {
-      await navigator.clipboard.writeText(DATAFLOW_COPY_PROMPT);
-      notify('info', t('resources.dataflow.promptCopied'));
+      await navigator.clipboard.writeText(prompt.text);
+      notify('info', prompt.contextNodes === 0
+        ? t('resources.dataflow.promptCopied')
+        : t(prompt.degraded
+            ? 'resources.dataflow.paste.promptCopiedTrimmed'
+            : 'resources.dataflow.paste.promptCopiedWithGraph', { n: prompt.contextNodes }));
     } catch (error) {
       notify('error', t('common.status.error'), error);
     }

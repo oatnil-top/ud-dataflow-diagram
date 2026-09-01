@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Upload } from 'lucide-react'
 import { useFlowStore } from '../../store/flowStoreContext'
-import { detectLegacyDialect } from '../../store/importFormats'
+import { importPastedGraph, PASTE_FAILURE_KEYS } from '../../store/pasteImport'
 
 interface GraphImportPanelProps {
   isOpen: boolean
@@ -14,6 +14,7 @@ export default function GraphImportPanel({ isOpen, onClose, getViewportCenter }:
   const { t } = useTranslation()
   const flowStore = useFlowStore()
   const importGraph = flowStore((state) => state.importGraph)
+  const setImportSummary = flowStore((state) => state.setImportSummary)
   const [jsonText, setJsonText] = useState('')
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -28,27 +29,13 @@ export default function GraphImportPanel({ isOpen, onClose, getViewportCenter }:
       return
     }
 
-    let parsed: unknown
-    try {
-      // Validate JSON syntax first
-      parsed = JSON.parse(jsonText)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('resources.dataflow.panel.invalidJson'))
-      return
-    }
-
-    // A retired dialect gets a named rejection, not a generic failure — the
-    // user is probably holding output from an old copy-prompt and needs to
-    // know what happened and the way out (re-copy the prompt, regenerate)
-    if (detectLegacyDialect(parsed as { nodes?: unknown[]; groups?: unknown[] })) {
-      setError(t('resources.dataflow.panel.legacyFormatRejected'))
-      return
-    }
-
-    const center = getViewportCenter?.()
-    const success = importGraph?.(jsonText, center)
-    if (!success) {
-      setError(t('resources.dataflow.panel.importNotRecognized'))
+    // The whole pipeline — unwrap fence/prose, repair, refuse retired dialects by name,
+    // import with paste semantics — lives in pasteImport.ts so this panel, the toolbar
+    // popover and canvas Ctrl+V cannot drift apart. What used to be here was a raw
+    // JSON.parse whose error text ("Unexpected token '`'") was shown to the user verbatim.
+    const outcome = importPastedGraph(jsonText, { importGraph, setImportSummary }, getViewportCenter?.())
+    if (!outcome.ok) {
+      setError(t(PASTE_FAILURE_KEYS[outcome.reason]))
       return
     }
 

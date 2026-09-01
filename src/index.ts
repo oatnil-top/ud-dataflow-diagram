@@ -17,10 +17,24 @@ export {
 } from './host'
 export { DiagramContext, useDiagramContext, type DiagramContextValue } from './diagramContext'
 export * from './types'
-export { createFlowStore, type FlowStore } from './store/flowStore'
+export { createFlowStore, type FlowStore, type ImportResult, type ImportOptions } from './store/flowStore'
 export { detectLegacyDialect, computeTopologicalLayout } from './store/importFormats'
 export { graphToText } from './utils/graphToText'
-export { DATAFLOW_COPY_PROMPT, DATAFLOW_SYSTEM_PROMPT } from './utils/graphToPrompt'
+export {
+  DATAFLOW_COPY_PROMPT,
+  DATAFLOW_SYSTEM_PROMPT,
+  buildCopyPrompt,
+  type CopyPrompt,
+} from './utils/graphToPrompt'
+export { graphToContext, type GraphContext } from './utils/graphToContext'
+export { extractGraphJson, looksLikeGraphPayload, type ExtractFailure } from './utils/extractJson'
+export {
+  importPastedGraph,
+  clipboardTextIsGraph,
+  PASTE_FAILURE_KEYS,
+  type PasteFailure,
+  type PasteOutcome,
+} from './store/pasteImport'
 export { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio'
 export {
   embedJsonInPng,

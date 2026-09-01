@@ -187,6 +187,21 @@
     "outputRequired": "至少需要一个带表达式的输出字段",
     "invalidExpression": "\"{{name}}\" 的表达式无效：{{error}}"
   },
+  "paste": {
+    "added": "已导入 {{nodes}} 个节点、{{pipes}} 条连线",
+    "nothingAdded": "没有新内容 —— 这份输出里的节点画布上都已经有了",
+    "skippedNodes": "{{n}} 个已在画布上,已跳过",
+    "skippedPipes": "{{n}} 条连线已存在",
+    "droppedPipes": "丢弃 {{n}} 条连线(找不到名为「{{endpoint}}」的节点)",
+    "undo": "撤销",
+    "dismiss": "关闭",
+    "truncated": "这份输出不完整,像是被截断了。回到聊天里让它「重新只输出完整的 JSON」,或点继续后把两段拼起来再粘贴。",
+    "noJson": "粘贴的内容里没有找到图 JSON。请重新复制提示词(导出 → 复制提示词),在 AI 聊天里跑一遍,再把回答粘回来。",
+    "malformed": "找到了像 JSON 的内容,但读不出来。让聊天重新单独输出一次 JSON,前后不要带别的文字。",
+    "notAGraph": "这份 JSON 是合法的,但里面没有可导入的节点。它需要一个 \"nodes\" 数组 —— 请重新复制提示词让 AI 再生成一次。",
+    "promptCopiedWithGraph": "提示词已复制,包含当前图的 {{n}} 个节点",
+    "promptCopiedTrimmed": "提示词已复制,包含当前图的 {{n}} 个节点 —— 为控制长度已省略字段示例值"
+  },
   "setOp": {
     "union": "并集 (A ∪ B) —— 两者的所有字段",
     "intersection": "交集 (A ∩ B) —— 两者共有的字段",

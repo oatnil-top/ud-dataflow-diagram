@@ -3,6 +3,8 @@ import type { Node } from '@xyflow/react'
 import type { TFunction } from 'i18next'
 import { useDataflowHost, useNotify } from '../host'
 import type { ResourceNodeData } from '../types'
+import { clipboardTextIsGraph, importPastedGraph, PASTE_FAILURE_KEYS } from '../store/pasteImport'
+import type { ImportResult } from '../store/flowStore'
 
 interface UseCanvasPasteParams {
   getNodes: () => Node[]
@@ -12,13 +14,27 @@ interface UseCanvasPasteParams {
   updateResourceNode: (nodeId: string, data: Partial<ResourceNodeData>) => void
   addResourceNode: (name: string, resourceId?: string, position?: { x: number; y: number }) => string
   addNoteNode: (name: string, content?: string, position?: { x: number; y: number }) => string
+  /** Merge a pasted graph into the canvas with paste semantics (store.importGraph). */
+  importGraph: (
+    json: string,
+    viewportCenter?: { x: number; y: number },
+    opts?: { replace?: boolean; sameIdMeansSameNode?: boolean },
+  ) => ImportResult | null
+  setImportSummary: (summary: ImportResult | null) => void
   t: TFunction
 }
 
 /**
  * Canvas paste handler — supports pasting images into selected resource nodes
- * (or a fresh one), cross-diagram dataflow JSON, resource:// URIs, and a plain
- * text fallback that becomes a note node.
+ * (or a fresh one), cross-diagram dataflow JSON, a graph an AI chat wrote,
+ * resource:// URIs, and a plain text fallback that becomes a note node.
+ *
+ * The graph branch matters because Ctrl+V on the canvas is what a user told "paste it
+ * back" actually does — and before it existed, that keystroke turned a 4KB answer into a
+ * 4KB sticky note, the feature's worst failure shape. It runs AFTER the `_dataflow`
+ * branch (that one is our own copy/paste, which re-mints ids on purpose) and BEFORE the
+ * note fallback, and only when clipboardTextIsGraph recognises the editor's own node
+ * shape. A wrong guess costs one Ctrl+Z; the summary bar puts undo on screen.
  *
  * The image branch needs host.ts `resources.upload`. With no host adapter it is skipped
  * whole — no placeholder node, no upload, no error — and the paste continues into the
@@ -34,6 +50,8 @@ export function useCanvasPaste({
   updateResourceNode,
   addResourceNode,
   addNoteNode,
+  importGraph,
+  setImportSummary,
   t,
 }: UseCanvasPasteParams) {
   const host = useDataflowHost()
@@ -114,6 +132,13 @@ export function useCanvasPaste({
 
           const trimmed = text.trim()
           if (trimmed) {
+            // A graph an outside model wrote — import it instead of noting it down.
+            if (clipboardTextIsGraph(trimmed)) {
+              const outcome = importPastedGraph(trimmed, { importGraph, setImportSummary }, center)
+              if (!outcome.ok) notify('error', t(PASTE_FAILURE_KEYS[outcome.reason]))
+              return
+            }
+
             // Check for resource:// URIs — create resource nodes
             // Supports bare resource://uuid and markdown ![name](resource://uuid)
             const resourcePattern = /(?:!\[([^\]]*)\]\()?resource:\/\/([a-f0-9-]{36})\)?/gi
@@ -158,5 +183,5 @@ export function useCanvasPaste({
 
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
-  }, [pasteNode, pasteNodesFromClipboard, screenToFlowPosition, getNodes, updateResourceNode, addResourceNode, addNoteNode, upload, describe, notify, t])
+  }, [pasteNode, pasteNodesFromClipboard, screenToFlowPosition, getNodes, updateResourceNode, addResourceNode, addNoteNode, importGraph, setImportSummary, upload, describe, notify, t])
 }
