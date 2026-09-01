@@ -12,6 +12,7 @@ import {
 import type { JsonNodeData, ProcessNodeData, NoteNodeData, ResourceNodeData, ShapeNodeData, GroupNodeData, IconNodeData, PipeData, Field, OutputField, ShapeVariant } from '../types'
 import { generateId } from '../types'
 import { applySetOperation, SET_OP_SYMBOLS, type SetOperation } from '../utils/fieldSetOps'
+import { sortNodesParentsFirst } from '../utils/nodeOrder'
 import { ensureNodeFieldIds, parseImportedGraph } from './importFormats'
 
 // React Flow uses "Edge", we call them "Pipe" in our domain
@@ -405,9 +406,11 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
         ...(opts?.parentId ? { parentId: opts.parentId } : {}),
       }
 
-      // Groups must appear before child nodes in the array
+      // Prepending puts the group ahead of the plain nodes it will contain; the
+      // sort then puts it back behind its OWN parent when `opts.parentId` was
+      // given, which prepending alone gets backwards (utils/nodeOrder.ts).
       set({
-        nodes: [newNode, ...get().nodes],
+        nodes: sortNodesParentsFirst([newNode, ...get().nodes]) as AnyNode[],
       })
 
       return id

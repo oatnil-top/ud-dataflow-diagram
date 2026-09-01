@@ -12,9 +12,12 @@ import type { Node } from '@xyflow/react'
  * "Parent node <id> not found. Please make sure that parent nodes are in front
  * of their child nodes in the nodes array."
  *
- * Every place that writes `parentId` has to restore the invariant. Today that
- * is the document load path (store/importFormats.ts) and the drag-stop
- * drop-into-group path (utils/groupDrop.ts).
+ * Every place that writes `parentId` has to restore the invariant: the document
+ * load path (store/importFormats.ts), the drag-stop drop-into-group path
+ * (utils/groupDrop.ts), and group creation (store/flowStore.ts addGroupNode).
+ * A new writer that skips it fails the way task 68392c68 did — the relationship
+ * stores fine and only the painting is wrong, and a reload sorts it right, so
+ * it reads as intermittent rather than broken.
  */
 export function sortNodesParentsFirst<T extends Node>(nodes: T[]): T[] {
   const byId = new Map(nodes.map((n) => [n.id, n]))
