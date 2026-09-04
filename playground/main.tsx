@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import i18n from 'i18next'
 import { initReactI18next, useTranslation } from 'react-i18next'
+import { Languages } from 'lucide-react'
 import { DataflowEditor, DataflowHostContext, registerDataflowMessages } from '@oatnil/ud-dataflow-diagram'
 import { usePlaygroundHost } from './host'
 import { LandingCard } from './LandingCard'
@@ -55,14 +56,18 @@ function LanguageToggle() {
     live.changeLanguage(next)
     try { localStorage.setItem(LANG_KEY, next) } catch { /* forgets, still switches */ }
   }
+  // An icon button (owner, 2026-09-04) — the universal translate glyph; the tooltip
+  // still names the target language in its own script.
   return (
     <button
       type="button"
       onClick={switchTo}
-      className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-100 transition-colors"
-      style={{ border: '1px solid #e2e8f0', color: '#475569', backgroundColor: '#ffffff' }}
+      className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+      style={{ color: '#475569' }}
+      title={next === 'zh' ? '中文' : 'English'}
+      aria-label={next === 'zh' ? '中文' : 'English'}
     >
-      {next === 'zh' ? '中文' : 'English'}
+      <Languages size={16} />
     </button>
   )
 }
