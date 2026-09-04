@@ -9,10 +9,13 @@
  *
  * Four things keep the two apart, and three of them are visible right here:
  *
- *  1. GRAMMAR — `node` and `link`, nothing else. Position, style, group nesting and
- *     handles are unsayable in this language, so it cannot describe a document even if
- *     someone tried. ⛔ There is deliberately no `graphToDsl`: with no serializer there
- *     is no raw material for a second document format.
+ *  1. GRAMMAR — STRUCTURE is sayable, GEOMETRY never is. Four verbs: `node`, `icon`,
+ *     `group`, `link` (master, 2026-09-04, task 3ed10381: the DSL should express every
+ *     kind of element — the agent writes structure, the person drags positions — so the
+ *     only thing deliberately unsayable is position/size/style geometry). A group's
+ *     MEMBERSHIP is structure and belongs here; where the group's box sits does not.
+ *     ⛔ There is deliberately no `graphToDsl`: with no serializer there is no raw
+ *     material for a second document format.
  *  2. TYPE — the output is an `EditPlan`, a list of operations. It has no serializable
  *     document shape, so no code path can accidentally treat it as one.
  *  3. WIRING — this module imports NOTHING. It cannot reach importFormats, the store, or
@@ -56,7 +59,33 @@ export interface LinkOp {
   targetField?: string
 }
 
-export type EditOp = NodeOp | LinkOp
+/** `icon <id> [display name][: <icon-id>]` — an architecture icon element. */
+export interface IconOp {
+  kind: 'icon'
+  line: number
+  id: string
+  name?: string
+  /**
+   * Registry icon id, e.g. "lucide:Database". Kept verbatim like field types — an
+   * unknown id renders as a caption without a glyph, which is visible and fixable
+   * in the icon's own style panel. Absent means "leave alone" (default on create).
+   */
+  icon?: string
+}
+
+/** `group <id> [display name] [@preset][: member, member, ...]` — a container. */
+export interface GroupOp {
+  kind: 'group'
+  line: number
+  id: string
+  name?: string
+  /** Style preset written as @cluster etc.; verbatim, unknown ones render the default look. */
+  preset?: string
+  /** Member ids to wrap — nodes from earlier lines or the canvas. Empty = empty group. */
+  members: string[]
+}
+
+export type EditOp = NodeOp | LinkOp | IconOp | GroupOp
 
 /**
  * - `unrecognized`  — the line began with a verb (or sat among lines that did) and could
@@ -145,6 +174,56 @@ function parseNodeLine(body: string, line: number): NodeOp | null {
   if (id.includes('.')) return null
   const name = tokens.slice(1).join(' ')
   return { kind: 'node', line, id, ...(name ? { name } : {}), fields: parseFields(fieldsPart) }
+}
+
+/**
+ * `icon <id> [display name][: <icon-id>]`
+ *
+ * The FIRST colon splits head from icon id, so "lucide:Database" keeps ITS colon —
+ * it sits entirely after the separator.
+ */
+function parseIconLine(body: string, line: number): IconOp | null {
+  const colon = body.indexOf(':')
+  const head = (colon === -1 ? body : body.slice(0, colon)).trim()
+  const iconPart = colon === -1 ? '' : body.slice(colon + 1).trim()
+
+  const tokens = head.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return null
+  const id = tokens[0]
+  if (id.includes('.')) return null
+  const name = tokens.slice(1).join(' ')
+  const icon = iconPart.split(/\s+/).filter(Boolean)[0]
+  return { kind: 'icon', line, id, ...(name ? { name } : {}), ...(icon ? { icon } : {}) }
+}
+
+/** `group <id> [display name] [@preset][: member, member, ...]` */
+function parseGroupLine(body: string, line: number): GroupOp | null {
+  const colon = body.indexOf(':')
+  const head = (colon === -1 ? body : body.slice(0, colon)).trim()
+  const membersPart = colon === -1 ? '' : body.slice(colon + 1)
+
+  const tokens = head.split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return null
+  const id = tokens[0]
+  if (id.includes('.')) return null
+  // @preset may sit anywhere after the id; everything else is the display name
+  let preset: string | undefined
+  const nameTokens: string[] = []
+  for (const token of tokens.slice(1)) {
+    if (token.startsWith('@') && token.length > 1 && !preset) preset = token.slice(1)
+    else nameTokens.push(token)
+  }
+  const name = nameTokens.join(' ')
+
+  const members: string[] = []
+  for (const entry of membersPart.split(',')) {
+    const member = entry.trim()
+    if (member === '') continue
+    // A "member" with spaces or dots is not an id — the whole line is likely prose
+    if (/[\s.]/.test(member)) return null
+    members.push(member)
+  }
+  return { kind: 'group', line, id, ...(name ? { name } : {}), ...(preset ? { preset } : {}), members }
 }
 
 /** `link <a>[.<field>] -> <b>[.<field>]` */
@@ -237,7 +316,7 @@ export function parseDsl(raw: string): EditPlan {
     if (trimmed === '' || trimmed.startsWith('#') || trimmed.startsWith('//')) continue
 
     const line = normalize(trimmed)
-    const verbMatch = line.match(/^(node|link)\b\s*/i)
+    const verbMatch = line.match(/^(node|link|icon|group)\b\s*/i)
     if (!verbMatch) {
       prose.push({ line: lineNo, reason: 'unrecognized', text: trimmed })
       continue
@@ -245,7 +324,11 @@ export function parseDsl(raw: string): EditPlan {
 
     const verb = verbMatch[1].toLowerCase()
     const body = line.slice(verbMatch[0].length)
-    const op = verb === 'node' ? parseNodeLine(body, lineNo) : parseLinkLine(body, lineNo)
+    const op =
+      verb === 'node' ? parseNodeLine(body, lineNo)
+      : verb === 'icon' ? parseIconLine(body, lineNo)
+      : verb === 'group' ? parseGroupLine(body, lineNo)
+      : parseLinkLine(body, lineNo)
 
     if (!op) {
       badLines.push({
@@ -293,11 +376,15 @@ export function parseDsl(raw: string): EditPlan {
  *     commands, or one that carries fields or is a link.
  *
  * "node modules are broken again" is a valid one-line `node` op and would otherwise
- * become a node; under this rule it stays the note the user meant.
+ * become a node; the same goes for "icon fonts look wrong" and "group chat idea" —
+ * under this rule a bare create-line with no payload stays the note the user meant.
  */
 export function looksLikeDslPayload(plan: EditPlan): boolean {
   if (plan.ops.length === 0 || plan.badLines.length > 0) return false
   if (plan.ops.length > 1) return true
   const only = plan.ops[0]
-  return only.kind === 'link' || only.fields.length > 0
+  if (only.kind === 'link') return true
+  if (only.kind === 'node') return only.fields.length > 0
+  if (only.kind === 'icon') return only.icon !== undefined
+  return only.members.length > 0
 }

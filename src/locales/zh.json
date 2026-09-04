@@ -186,6 +186,7 @@
     "skippedNodes": "{{n}} 个已在画布上,已跳过",
     "skippedPipes": "{{n}} 条连线已存在",
     "droppedPipes": "丢弃 {{n}} 条连线(找不到名为「{{endpoint}}」的节点)",
+    "droppedMembers": "{{n}} 个成员未入组(如「{{member}}」)",
     "undo": "撤销",
     "dismiss": "关闭",
     "truncated": "这份输出不完整,像是被截断了。回到聊天里让它「重新只输出完整的 JSON」,或点继续后把两段拼起来再粘贴。",

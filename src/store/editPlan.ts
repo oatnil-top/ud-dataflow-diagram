@@ -1,8 +1,9 @@
 import type { Node } from '@xyflow/react'
 import type { AnyNode, Pipe } from './flowStore'
-import type { Field, JsonNodeData } from '../types'
+import type { Field, JsonNodeData, IconNodeData, GroupNodeData } from '../types'
 import { generateId } from '../types'
 import { estimateNodeSize, fillMissingHandles } from './importFormats'
+import { sortNodesParentsFirst } from '../utils/nodeOrder'
 import type { EditPlan, DslField, BadLine } from './dslParser'
 
 /**
@@ -38,6 +39,13 @@ export interface EditApplication {
   droppedPipes: { source: string; target: string }[]
   /** Field-level links whose field did not exist — connected node-to-node instead. */
   degradedLinks: number
+  /**
+   * Group members that could not be wrapped: the id does not exist, the node already
+   * lives in another group, or the group id named an EXISTING group (membership of a
+   * group already on the canvas is the user's drag domain — a paste must not restack
+   * containers they arranged).
+   */
+  droppedMembers: { group: string; member: string }[]
   /** Ids of the nodes this plan created, so the caller can select them. */
   newNodeIds: string[]
   ignoredLines: BadLine[]
@@ -232,42 +240,170 @@ export function applyEditPlan(plan: EditPlan, ctx: EditContext): EditApplication
   const resolve = (id: string) => updated.get(id) ?? byId.get(id)
 
   for (const op of plan.ops) {
-    if (op.kind !== 'node') continue
+    if (op.kind !== 'node' && op.kind !== 'icon') continue
     const existing = resolve(op.id)
 
     if (existing) {
       // MODIFY. Never moved: the position is the user's, and a rename is not a reason to
-      // relocate something they placed.
-      const data = existing.data as JsonNodeData
-      const fields = cloneFields(data.fields ?? [])
-      for (const f of op.fields) mergeField(fields, f)
-      updated.set(op.id, {
-        ...existing,
-        data: { ...data, ...(op.name ? { name: op.name } : {}), fields },
-      } as AnyNode)
+      // relocate something they placed. A verb aimed at a node of ANOTHER type renames
+      // it and nothing more — merging fields into an icon (or an icon id into a table)
+      // would corrupt data the verb has no business touching.
+      if (op.kind === 'node' && existing.type === 'json') {
+        const data = existing.data as JsonNodeData
+        const fields = cloneFields(data.fields ?? [])
+        for (const f of op.fields) mergeField(fields, f)
+        updated.set(op.id, {
+          ...existing,
+          data: { ...data, ...(op.name ? { name: op.name } : {}), fields },
+        } as AnyNode)
+      } else if (op.kind === 'icon' && existing.type === 'icon') {
+        const data = existing.data as IconNodeData
+        updated.set(op.id, {
+          ...existing,
+          data: { ...data, ...(op.name ? { name: op.name } : {}), ...(op.icon ? { icon: op.icon } : {}) },
+        } as AnyNode)
+      } else if (op.name) {
+        updated.set(op.id, {
+          ...existing,
+          data: { ...(existing.data as object), name: op.name },
+        } as AnyNode)
+      }
       continue
     }
 
     // CREATE. Position is filled in below, once every new node's size is known.
-    const fields: Field[] = []
-    for (const f of op.fields) mergeField(fields, f)
-    const node = {
-      id: op.id,
-      type: 'json',
-      position: { x: 0, y: 0 },
-      selected: true,
-      data: { name: op.name ?? op.id, fields } as JsonNodeData,
-    } as Node
+    let node: Node
+    if (op.kind === 'node') {
+      const fields: Field[] = []
+      for (const f of op.fields) mergeField(fields, f)
+      node = {
+        id: op.id,
+        type: 'json',
+        position: { x: 0, y: 0 },
+        selected: true,
+        data: { name: op.name ?? op.id, fields } as JsonNodeData,
+      } as Node
+    } else {
+      node = {
+        id: op.id,
+        type: 'icon',
+        position: { x: 0, y: 0 },
+        selected: true,
+        // The default glyph when the model named none; an UNKNOWN id is kept verbatim
+        // (same policy as field types) — it renders as a caption the style panel can fix.
+        data: { name: op.name ?? op.id, icon: op.icon ?? 'lucide:Boxes' } as IconNodeData,
+      } as Node
+    }
     created.push({ node, size: estimateNodeSize(node) })
     newNodeIds.push(op.id)
     updated.set(op.id, node as AnyNode)
   }
 
+  const occupied: Box[] = ctx.nodes
+    .filter((n) => !n.parentId)
+    .map((n) => ({ ...n.position, ...estimateNodeSize(n) }))
   if (ctx.viewport && created.length > 0) {
-    const occupied = ctx.nodes
-      .filter((n) => !n.parentId)
-      .map((n) => ({ ...n.position, ...estimateNodeSize(n) }))
     placeNewNodes(created, occupied, ctx.viewport)
+  }
+
+  // ---- groups ------------------------------------------------------------
+  // After placement: a group's box is computed AROUND its members' just-placed
+  // positions, then members move into the group's coordinate space. Geometry stays
+  // unsayable in the DSL (dslParser.ts header) — membership is structure, the box
+  // is derived.
+
+  /** Group chrome: room for the header above the members, breathing space around. */
+  const GROUP_PAD_TOP = 52
+  const GROUP_PAD = 24
+  const droppedMembers: { group: string; member: string }[] = []
+  const emptyGroups: { node: Node; size: Size }[] = []
+  const createdGroups: Node[] = []
+
+  for (const op of plan.ops) {
+    if (op.kind !== 'group') continue
+    const existing = resolve(op.id)
+
+    if (existing) {
+      // Rename / restyle only. Membership of an existing group is the user's drag
+      // domain; a paste must not restack containers they arranged.
+      if (op.name || op.preset) {
+        const data = existing.data as GroupNodeData
+        updated.set(op.id, {
+          ...existing,
+          data: {
+            ...data,
+            ...(op.name ? { name: op.name } : {}),
+            ...(op.preset ? { stylePreset: op.preset as GroupNodeData['stylePreset'] } : {}),
+          },
+        } as AnyNode)
+      }
+      for (const member of op.members) droppedMembers.push({ group: op.id, member })
+      continue
+    }
+
+    // Members must exist by this line (earlier lines or the canvas) and be top-level —
+    // a node already inside another group is not silently restacked.
+    const members: Node[] = []
+    for (const member of op.members) {
+      const node = resolve(member)
+      if (!node || node.parentId) {
+        droppedMembers.push({ group: op.id, member })
+        continue
+      }
+      members.push(node as Node)
+    }
+
+    const group = {
+      id: op.id,
+      type: 'group',
+      position: { x: 0, y: 0 },
+      selected: true,
+      style: { width: 400, height: 300 },
+      data: {
+        name: op.name ?? op.id,
+        ...(op.preset ? { stylePreset: op.preset as GroupNodeData['stylePreset'] } : {}),
+      } as GroupNodeData,
+    } as Node
+
+    if (members.length === 0) {
+      emptyGroups.push({ node: group, size: { width: 400, height: 300 } })
+    } else {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const m of members) {
+        const size = estimateNodeSize(m)
+        minX = Math.min(minX, m.position.x)
+        minY = Math.min(minY, m.position.y)
+        maxX = Math.max(maxX, m.position.x + size.width)
+        maxY = Math.max(maxY, m.position.y + size.height)
+      }
+      group.position = { x: minX - GROUP_PAD, y: minY - GROUP_PAD_TOP }
+      group.style = {
+        width: maxX - minX + 2 * GROUP_PAD,
+        height: maxY - minY + GROUP_PAD_TOP + GROUP_PAD,
+      }
+      occupied.push({ ...group.position, width: group.style.width as number, height: group.style.height as number })
+
+      for (const m of members) {
+        const relative = { x: m.position.x - group.position.x, y: m.position.y - group.position.y }
+        if (updated.get(m.id) === (m as AnyNode) || created.some((c) => c.node === m)) {
+          // A node this plan created — mutate the fresh object in place
+          m.parentId = op.id
+          m.position = relative
+        } else {
+          // An existing canvas node joins the group where it already stands: parentId
+          // plus a relative position that leaves its absolute position unchanged.
+          updated.set(m.id, { ...(m as AnyNode), parentId: op.id, position: relative, selected: false } as AnyNode)
+        }
+      }
+    }
+
+    newNodeIds.push(op.id)
+    createdGroups.push(group)
+    updated.set(op.id, group as AnyNode)
+  }
+
+  if (ctx.viewport && emptyGroups.length > 0) {
+    placeNewNodes(emptyGroups, occupied, ctx.viewport)
   }
 
   // ---- links -------------------------------------------------------------
@@ -310,8 +446,11 @@ export function applyEditPlan(plan: EditPlan, ctx: EditContext): EditApplication
     const replacement = updated.get(n.id)
     return replacement && replacement !== n ? replacement : ({ ...n, selected: false } as AnyNode)
   })
-  const createdNodes = created.map((c) => c.node as AnyNode)
-  const allNodes = [...nodes, ...createdNodes]
+  const createdNodes = [...created.map((c) => c.node as AnyNode), ...(createdGroups as AnyNode[])]
+  // Parents ahead of children (React Flow requirement, utils/nodeOrder.ts): a group
+  // created here comes AFTER the members it wraps in creation order, and an existing
+  // node newly wrapped sits before its brand-new parent.
+  const allNodes = sortNodesParentsFirst([...nodes, ...createdNodes]) as AnyNode[]
 
   // Node-level links get their anchors from geometry, exactly as an imported graph does —
   // without this React Flow attaches an undeclared edge to the node's first handle, which
@@ -344,6 +483,7 @@ export function applyEditPlan(plan: EditPlan, ctx: EditContext): EditApplication
     skippedPipes,
     droppedPipes,
     degradedLinks,
+    droppedMembers,
     newNodeIds,
     ignoredLines: plan.badLines,
   }

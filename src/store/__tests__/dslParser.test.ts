@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
-import { parseDsl } from '../dslParser'
+import { parseDsl, looksLikeDslPayload } from '../dslParser'
 
 /**
  * The grammar, its tolerance list and its truncation behaviour — design fb629b6a note
@@ -144,5 +144,42 @@ describe('nothing at all', () => {
     const plan = parseDsl('I cannot help with that request.')
     expect(plan.ops).toEqual([])
     expect(plan.badLines).toEqual([])
+  })
+})
+
+describe('grammar — icon and group (master 2026-09-04: structure sayable, geometry never)', () => {
+  it('icon keeps the colon inside "lucide:Database" — only the FIRST colon splits', () => {
+    const plan = parseDsl('icon db 主库: lucide:Database')
+    expect(plan.badLines).toEqual([])
+    expect(plan.ops[0]).toMatchObject({ kind: 'icon', id: 'db', name: '主库', icon: 'lucide:Database' })
+  })
+
+  it('a bare icon line has no icon id — create-time default is the applier’s business', () => {
+    const plan = parseDsl('icon gw API Gateway\nlink gw -> gw2')
+    expect(plan.ops[0]).toMatchObject({ kind: 'icon', id: 'gw', name: 'API Gateway' })
+    expect((plan.ops[0] as { icon?: string }).icon).toBeUndefined()
+  })
+
+  it('group reads members after the colon and @preset anywhere in the head', () => {
+    const plan = parseDsl('group vpc 生产 VPC @network: users, orders, gw')
+    expect(plan.badLines).toEqual([])
+    expect(plan.ops[0]).toMatchObject({
+      kind: 'group', id: 'vpc', name: '生产 VPC', preset: 'network',
+      members: ['users', 'orders', 'gw'],
+    })
+  })
+
+  it('a "member" with spaces is prose, not an id — the whole line is reported, not guessed at', () => {
+    const plan = parseDsl('node users 用户: id uuid\ngroup g 平台: the users table, orders')
+    expect(plan.badLines).toHaveLength(1)
+    expect(plan.badLines[0].reason).toBe('maybeTruncated') // last content line
+  })
+
+  it('a lone "icon fonts look wrong" or "group chat idea" stays a note, not a diagram edit', () => {
+    expect(parseDsl('icon fonts look wrong').ops[0]).toMatchObject({ kind: 'icon' })
+    expect(looksLikeDslPayload(parseDsl('icon fonts look wrong'))).toBe(false)
+    expect(looksLikeDslPayload(parseDsl('group chat idea'))).toBe(false)
+    expect(looksLikeDslPayload(parseDsl('icon db: lucide:Database'))).toBe(true)
+    expect(looksLikeDslPayload(parseDsl('group g: a, b'))).toBe(true)
   })
 })

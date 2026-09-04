@@ -234,3 +234,101 @@ describe('the ignored-lines report reaches the summary', () => {
     })
   })
 })
+
+describe('icon and group (master 2026-09-04: the agent writes structure, the person drags positions)', () => {
+  it('icon creates an icon node, defaulting the glyph when the model named none', () => {
+    const store = createFlowStore()
+    apply(store, 'icon gw API Gateway: lucide:Globe\nicon q Queue')
+    const [gw, q] = store.getState().nodes
+    expect(gw).toMatchObject({ type: 'icon', data: { name: 'API Gateway', icon: 'lucide:Globe' } })
+    expect(q).toMatchObject({ type: 'icon', data: { name: 'Queue', icon: 'lucide:Boxes' } })
+  })
+
+  it('group wraps members created in the same paste: parentId set, absolute spots unchanged', () => {
+    const store = createFlowStore()
+    apply(store, `node users 用户: id uuid
+node orders 订单: id uuid
+group vpc 生产 VPC @network: users, orders`)
+
+    const nodes = store.getState().nodes
+    const group = nodes.find((n) => n.id === 'vpc')!
+    const users = nodes.find((n) => n.id === 'users')!
+    expect(group).toMatchObject({ type: 'group', data: { name: '生产 VPC', stylePreset: 'network' } })
+    expect(users.parentId).toBe('vpc')
+    // Child coordinates are relative to the group and inside its box
+    expect(users.position.x).toBeGreaterThan(0)
+    expect(users.position.y).toBeGreaterThan(0)
+    const style = group.style as { width: number; height: number }
+    expect(users.position.x).toBeLessThan(style.width)
+    expect(users.position.y).toBeLessThan(style.height)
+    // Parents come before children in the array (React Flow requirement)
+    expect(nodes.indexOf(group)).toBeLessThan(nodes.indexOf(users))
+  })
+
+  it('an EXISTING canvas node joins the group where it stands — absolute position unchanged', () => {
+    const store = seeded() // users at (0,0), orders at (600,0)
+    apply(store, 'group g 数据层: users, orders')
+
+    const nodes = store.getState().nodes
+    const group = nodes.find((n) => n.id === 'g')!
+    const users = nodes.find((n) => n.id === 'users')!
+    expect(users.parentId).toBe('g')
+    // relative + group = the (0,0) the user placed it at
+    expect(users.position.x + group.position.x).toBe(0)
+    expect(users.position.y + group.position.y).toBe(0)
+  })
+
+  it('a member that does not exist is dropped BY NAME, not guessed into being', () => {
+    const store = createFlowStore()
+    const result = apply(store, 'node a A: x string\ngroup g G: a, ghost')
+    expect(result?.droppedMembers).toEqual([{ group: 'g', member: 'ghost' }])
+    expect(store.getState().nodes.find((n) => n.id === 'ghost')).toBeUndefined()
+  })
+
+  it('naming an EXISTING group renames it but never restacks its membership', () => {
+    const store = createFlowStore()
+    apply(store, 'node a A: x string\ngroup g G: a')
+    const result = apply(store, 'node b B: y string\ngroup g 改名 @cluster: b')
+
+    const nodes = store.getState().nodes
+    const group = nodes.find((n) => n.id === 'g')!
+    expect(group.data).toMatchObject({ name: '改名', stylePreset: 'cluster' })
+    expect(nodes.find((n) => n.id === 'b')!.parentId).toBeUndefined()
+    expect(result?.droppedMembers).toEqual([{ group: 'g', member: 'b' }])
+  })
+
+  it('nested groups work when the inner group is defined first', () => {
+    const store = createFlowStore()
+    apply(store, `icon db 主库: lucide:Database
+group inner 数据: db
+group outer 平台: inner`)
+
+    const nodes = store.getState().nodes
+    const inner = nodes.find((n) => n.id === 'inner')!
+    const outer = nodes.find((n) => n.id === 'outer')!
+    expect(inner.parentId).toBe('outer')
+    expect(nodes.indexOf(outer)).toBeLessThan(nodes.indexOf(inner))
+    expect(nodes.find((n) => n.id === 'db')!.parentId).toBe('inner')
+  })
+
+  it('a node verb aimed at an icon renames it and NEVER merges fields into it', () => {
+    const store = createFlowStore()
+    apply(store, 'icon gw 网关: lucide:Globe')
+    apply(store, 'node gw 新网关: id uuid')
+    const gw = store.getState().nodes[0]
+    expect(gw.type).toBe('icon')
+    expect(gw.data).toMatchObject({ name: '新网关', icon: 'lucide:Globe' })
+    expect((gw.data as { fields?: unknown }).fields).toBeUndefined()
+  })
+
+  it('link connects icons and groups like any other id', () => {
+    const store = createFlowStore()
+    const result = apply(store, `icon gw 网关: lucide:Globe
+node users 用户: id uuid
+group g G: users
+link gw -> g`)
+    expect(result?.addedPipes).toBe(1)
+    const pipe = store.getState().pipes[0]
+    expect(pipe).toMatchObject({ source: 'gw', target: 'g' })
+  })
+})

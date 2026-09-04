@@ -115,10 +115,13 @@ ${DATAFLOW_PROMPT_BODY}`
  * The text a user copies into whatever chat window they have, so that pasting the answer
  * back EDITS their diagram.
  *
- * This is a teaching material, not a serialization format. It defines two verbs — `node`
- * and `link` — and nothing else, and store/dslParser.ts is the implementation of exactly
- * this contract. Change one and change the other: this paragraph is what a stranger's
- * model reads, and the parser is what their answer meets.
+ * This is a teaching material, not a serialization format. It defines four verbs —
+ * `node`, `icon`, `group`, `link` (master 2026-09-04: structure is sayable, geometry
+ * never) — and store/dslParser.ts is the implementation of exactly this contract.
+ * Change one and change the other: this paragraph is what a stranger's model reads,
+ * and the parser is what their answer meets. The icon whitelist below mirrors
+ * NodeIcon.tsx's LUCIDE_ICONS map — an id outside it renders as a caption with no
+ * glyph, so keep the two lists in step too.
  *
  * WHY IT IS NOT JSON ANY MORE (design fb629b6a note 9630c775). Measured, same request,
  * same model: five tables and their foreign keys came back as 3665 bytes / 1110 tokens of
@@ -134,26 +137,35 @@ ${DATAFLOW_PROMPT_BODY}`
  * matters on context the model was not going to use. The material tells the model to ASK
  * when it needs the graph, and a real run confirmed it does.
  *
- * These 1296 bytes / 305 tokens are the delivered artifact, not a draft of one.
+ * These 2346 bytes (~590 tokens, measured 2026-09-04; the icon whitelist is ~440 bytes
+ * of that) are the delivered artifact, not a draft of one.
  */
 export const DATAFLOW_COPY_PROMPT = `Turn my request into diagram edit commands — plain text, ONE command per line, nothing else. No JSON, no code fence, no explanations.
 
 Commands:
 node <id> <display name>: <field> <type>, <field> <type>, ...
+icon <id> <display name>: <icon-id>
+group <id> <display name> @<preset>: <memberId>, <memberId>, ...
 link <sourceId> -> <targetId>
 
 Rules:
-- "node" with a new id CREATES a node; with an existing id it MODIFIES that node: the display name is replaced, listed fields are added or updated by name, existing fields are never removed.
-- ids are short ascii words; the display name may be in any language; the ": fields" part is optional.
+- "node" is a data entity (table, API object). With a new id it CREATES; with an existing id it MODIFIES: the display name is replaced, listed fields are added or updated by name, existing fields are never removed.
+- ids are short ascii words; the display name may be in any language; the ": ..." part is optional.
 - <type> is one of string | number | boolean | uuid | object (optional, default string). Nested fields use dots: address.city string
-- "link" connects two node ids — ids from my current graph (I may paste it in this chat) or ids you created above. To connect two specific fields: link users.id -> orders.user_id
+- "icon" is an architecture element (service, gateway, queue...). <icon-id> is lucide:<Name>, Name one of: User Users Building2 Contact Server Cpu Monitor Laptop Smartphone Tablet Terminal Container Database HardDrive Archive FolderOpen MemoryStick Globe Network Wifi Router Cable Cloud CloudCog CloudUpload CloudDownload Shield Lock Key ShieldCheck Fingerprint Mail MessageSquare Bell Send Webhook Blocks Workflow Plug GitBranch RefreshCcw Layers Boxes Cog Zap BarChart3 FileText Clock Sparkles
+- "group" draws a container around EXISTING members — write the members' own lines first. @<preset> is optional, one of cloud region network security cluster service danger subtle (a VPC is @network, a k8s/AKS cluster is @cluster).
+- "link" connects two ids (nodes, icons or groups) — ids from my current graph (I may paste it in this chat) or ids you created above. To connect two specific fields: link users.id -> orders.user_id
 - Direction follows the reference: from the entity being referenced to the entity holding the reference.
+- NEVER write positions, sizes or coordinates — I arrange the canvas myself.
 - Never invent ids I did not give you, except ids for nodes you are creating. If my request refers to my existing diagram and I have not pasted my current graph, ask me for it in plain text first.
 
 Example:
 node users 用户: id uuid, email string
 node orders 订单: id uuid, user_id uuid, total number
-link users.id -> orders.user_id`
+link users.id -> orders.user_id
+icon gw API Gateway: lucide:Globe
+group vpc 生产 VPC @network: users, orders, gw
+link gw -> users`
 
 export interface GraphForEditing {
   text: string

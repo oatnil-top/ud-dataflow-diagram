@@ -209,6 +209,8 @@ export interface ImportResult {
   updatedNodes: number
   /** DSL only: field-level links whose field did not exist, connected node-to-node. */
   degradedLinks: number
+  /** DSL only: group members that could not be wrapped (editPlan.ts droppedMembers). */
+  droppedMembers: { group: string; member: string }[]
   /** DSL only: lines that were not edits, by line number (dslParser.BadLine). */
   ignoredLines: BadLine[]
 }
@@ -1056,6 +1058,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
         format: 'json',
         updatedNodes: 0,
         degradedLinks: 0,
+        droppedMembers: [],
         ignoredLines: [],
       }
 
@@ -1115,6 +1118,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
         format: 'dsl',
         updatedNodes: applied.updatedNodes,
         degradedLinks: applied.degradedLinks,
+        droppedMembers: applied.droppedMembers,
         ignoredLines: applied.ignoredLines,
       }
     },

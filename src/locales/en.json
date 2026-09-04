@@ -186,6 +186,7 @@
     "skippedNodes": "{{n}} already on the canvas, skipped",
     "skippedPipes": "{{n}} connections already existed",
     "droppedPipes": "{{n}} connections dropped (no node named \"{{endpoint}}\")",
+    "droppedMembers": "{{n}} group members not wrapped (e.g. \"{{member}}\")",
     "undo": "Undo",
     "dismiss": "Dismiss",
     "truncated": "That output is incomplete — it looks like it was cut off. Go back to the chat and ask it to output the complete JSON again, or continue the answer and paste both parts together.",

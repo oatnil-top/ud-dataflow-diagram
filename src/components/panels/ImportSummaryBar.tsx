@@ -25,7 +25,7 @@ export default function ImportSummaryBar() {
   if (!summary) return null
 
   const { addedNodes, addedPipes, skippedNodes, skippedPipes, droppedPipes } = summary
-  const { updatedNodes, degradedLinks, ignoredLines } = summary
+  const { updatedNodes, degradedLinks, droppedMembers, ignoredLines } = summary
   // Modifying a node is a real outcome with no new node and no new edge to show for it —
   // without it in this test, "node users 客户" reports as "nothing happened".
   const nothingHappened = addedNodes === 0 && addedPipes === 0 && updatedNodes === 0
@@ -43,6 +43,14 @@ export default function ImportSummaryBar() {
       n: droppedPipes.length,
       // Name one missing endpoint: enough to recognise the mistake, short enough to read.
       endpoint: droppedPipes[0].target,
+    }))
+  }
+  if (droppedMembers.length > 0) {
+    // Name one member the group could not take, mirroring droppedPipes: enough to
+    // recognise the id the model got wrong (or the group that already existed).
+    notes.push(t('resources.dataflow.paste.droppedMembers', {
+      n: droppedMembers.length,
+      member: droppedMembers[0].member,
     }))
   }
   if (ignoredLines.length > 0) {

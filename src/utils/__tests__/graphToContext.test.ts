@@ -63,18 +63,27 @@ describe('the copy prompt and the graph are two separate clipboards now', () => 
     expect(DATAFLOW_COPY_PROMPT).not.toContain('"id"')
   })
 
-  it('the prompt teaches the two verbs and nothing that could describe a document', () => {
+  it('the prompt teaches the four verbs and nothing that could describe a document', () => {
     expect(DATAFLOW_COPY_PROMPT).toContain('node <id> <display name>')
+    expect(DATAFLOW_COPY_PROMPT).toContain('icon <id> <display name>')
+    expect(DATAFLOW_COPY_PROMPT).toContain('group <id> <display name>')
     expect(DATAFLOW_COPY_PROMPT).toContain('link <sourceId> -> <targetId>')
-    // Geometry, grouping and handles are unsayable in the grammar; the material must not
-    // hint otherwise, or a model will invent syntax the parser cannot read.
-    expect(DATAFLOW_COPY_PROMPT).not.toMatch(/position|parentId|sourceHandle|"nodes"/)
+    // GEOMETRY stays unsayable (master 2026-09-04: structure is sayable, geometry never);
+    // the material must not hint at document-format keys, or a model will invent syntax
+    // the parser cannot read. The prose rule "NEVER write positions" is allowed — it
+    // forbids the very thing this guard is about — so the guard checks the JSON key
+    // spellings, not the English word.
+    expect(DATAFLOW_COPY_PROMPT).not.toMatch(/"position"|parentId|sourceHandle|"nodes"/)
+    expect(DATAFLOW_COPY_PROMPT).toContain('NEVER write positions')
   })
 
-  it('it is the delivered 1296-byte artifact, not a draft — free chat boxes have a ceiling', () => {
+  it('it is the delivered ~2.3KB artifact, not a draft — free chat boxes have a ceiling', () => {
     const bytes = Buffer.byteLength(DATAFLOW_COPY_PROMPT)
     expect(bytes).toBeGreaterThan(1000)
-    expect(bytes).toBeLessThan(1600)
+    // 2346 measured 2026-09-04 (four verbs + the 49-name icon whitelist). The ceiling
+    // is headroom against drift, not a target: growing past it means the material is
+    // becoming a document again — trim before raising this number.
+    expect(bytes).toBeLessThan(2600)
   })
 
   it('buildGraphForEditing hands over the ids a link command has to name', () => {
