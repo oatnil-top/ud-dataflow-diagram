@@ -4,7 +4,6 @@ import {
   EdgeLabelRenderer,
   getSmoothStepPath,
   useStore,
-  useReactFlow,
   type EdgeProps,
   type Edge,
 } from '@xyflow/react'
@@ -128,45 +127,55 @@ function DataflowEdge({
   // ---- label: live state while dragging, ONE updatePipe (one undo step) ----
   // ---- on release, computed from the event's own coordinates. ----
   const { t } = useTranslation()
-  const { screenToFlowPosition } = useReactFlow()
-  const wpDragRef = useRef<{ index: number; startX: number; startY: number; base: Point; commitUnmoved: boolean } | null>(null)
+  const wpDragRef = useRef<{ indices: number[]; startX: number; startY: number; bases: Point[]; commitUnmoved: boolean } | null>(null)
 
-  const startWaypointDrag = (e: React.PointerEvent<SVGElement>, index: number, base: Point, commitUnmoved: boolean, initial: Point[]) => {
-    if (!interactive || e.button !== 0) return
+  const startWaypointDrag = (e: React.PointerEvent<SVGElement>, indices: number[], commitUnmoved: boolean, initial: Point[]) => {
+    if (!interactive || e.button !== 0 || indices.length === 0) return
     e.stopPropagation()
-    wpDragRef.current = { index, startX: e.clientX, startY: e.clientY, base, commitUnmoved }
+    wpDragRef.current = {
+      indices,
+      startX: e.clientX,
+      startY: e.clientY,
+      bases: indices.map((i) => ({ ...initial[i] })),
+      commitUnmoved,
+    }
     setLiveWaypoints(initial)
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
   }
   const onAnchorPointerDown = (e: React.PointerEvent<SVGElement>, index: number) => {
-    const current = data?.waypoints ?? []
-    startWaypointDrag(e, index, current[index], false, [...current])
+    startWaypointDrag(e, [index], false, [...(data?.waypoints ?? [])])
   }
   // Pointer-down on a segment midpoint INSERTS an anchor there and starts dragging
-  // it — add and place are one gesture. A plain click (no move) still adds: the
-  // midpoint is a sensible place for a bend to start its life.
+  // it — add and place are one gesture, and the DOT is the only way an anchor is
+  // born (owner, 2026-09-04: dragging the line must never create points). A plain
+  // click (no move) still adds: the midpoint is a sensible place for a bend to
+  // start its life.
   const onAddAnchorPointerDown = (e: React.PointerEvent<SVGElement>, segmentIndex: number, at: Point) => {
     const current = data?.waypoints ?? []
     const next = [...current.slice(0, segmentIndex), { ...at }, ...current.slice(segmentIndex)]
-    startWaypointDrag(e, segmentIndex, at, true, next)
+    startWaypointDrag(e, [segmentIndex], true, next)
   }
-  // Grabbing the LINE ITSELF (owner, 2026-09-04: "don't drag the point, drag the
-  // line") — an anchor is born exactly under the pointer and follows it. Unlike the
-  // midpoint dot, an unmoved click leaves nothing behind: clicks on a line are how
-  // people select, not how they mean to bend it.
+  // Grabbing the LINE ITSELF moves that SECTION (owner, 2026-09-04: "move it to the
+  // left, to the right — not create a new point"): both adjacent anchors ride the
+  // drag, so a middle section translates whole; a section attached to a node moves
+  // only its free end (the node connection cannot move). No anchors, no grab — the
+  // midpoint dot is how routing starts.
   const onLineBodyPointerDown = (e: React.PointerEvent<SVGElement>, segmentIndex: number) => {
-    const at = screenToFlowPosition({ x: e.clientX, y: e.clientY }, { snapToGrid: false })
     const current = data?.waypoints ?? []
-    const next = [...current.slice(0, segmentIndex), { ...at }, ...current.slice(segmentIndex)]
-    startWaypointDrag(e, segmentIndex, at, false, next)
+    // Segment i runs routePoints[i] → routePoints[i+1]; its ends map to waypoint
+    // indices i-1 and i, valid only where the end is an anchor, not a node.
+    const indices = [segmentIndex - 1, segmentIndex].filter((i) => i >= 0 && i < current.length)
+    startWaypointDrag(e, indices, false, [...current])
   }
   const onAnchorPointerMove = (e: React.PointerEvent<SVGElement>) => {
     const drag = wpDragRef.current
     if (!drag || !liveWaypoints) return
     const dx = (e.clientX - drag.startX) / zoom
     const dy = (e.clientY - drag.startY) / zoom
-    const moved = liveWaypoints.map((p, i) =>
-      i === drag.index ? { x: drag.base.x + dx, y: drag.base.y + dy } : p)
+    const moved = liveWaypoints.map((p, i) => {
+      const at = drag.indices.indexOf(i)
+      return at === -1 ? p : { x: drag.bases[at].x + dx, y: drag.bases[at].y + dy }
+    })
     setLiveWaypoints(moved)
   }
   const onAnchorPointerUp = (e: React.PointerEvent<SVGElement>) => {
@@ -175,13 +184,15 @@ function DataflowEdge({
     if (!drag || !liveWaypoints) return
     const dx = (e.clientX - drag.startX) / zoom
     const dy = (e.clientY - drag.startY) / zoom
-    // A midpoint-dot anchor commits even unmoved (the click placed it); a dragged
-    // anchor or a line-body grab only commits when it actually went somewhere.
+    // A midpoint-dot anchor commits even unmoved (the click placed it); anchor and
+    // section drags only commit when they actually went somewhere.
     if (drag.commitUnmoved || Math.abs(dx) >= 2 || Math.abs(dy) >= 2) {
-      const committed = liveWaypoints.map((p, i) =>
-        i === drag.index
-          ? { x: Math.round(drag.base.x + dx), y: Math.round(drag.base.y + dy) }
-          : { x: Math.round(p.x), y: Math.round(p.y) })
+      const committed = liveWaypoints.map((p, i) => {
+        const at = drag.indices.indexOf(i)
+        return at === -1
+          ? { x: Math.round(p.x), y: Math.round(p.y) }
+          : { x: Math.round(drag.bases[at].x + dx), y: Math.round(drag.bases[at].y + dy) }
+      })
       updatePipe(id, { waypoints: committed })
     }
     setLiveWaypoints(null)
@@ -255,26 +266,21 @@ function DataflowEdge({
           midpoint) and grow an anchor when grabbed. */}
       {interactive && selected && (
         <>
-          {/* The line body is itself a grab surface: a wide invisible stroke per
-              segment. Dragging it grows an anchor under the pointer; a plain click
-              adds nothing. Rendered first so anchor dots above win the hit test.
-              Deliberate cost: clicking a selected edge's body no longer toggles it
-              deselected — clicking empty canvas still does. */}
-          {(routed
-            ? routePoints.slice(0, -1).map((p, i) => ({
-                d: `M ${p.x} ${p.y} L ${routePoints[i + 1].x} ${routePoints[i + 1].y}`,
-                seg: i,
-              }))
-            : [{ d: stepPath, seg: 0 }]
-          ).map(({ d, seg }) => (
+          {/* Each SECTION of a routed line is a grab surface (wide invisible
+              stroke): dragging translates the section — its adjacent anchors ride
+              along; it never creates a point (the midpoint dots do that). Rendered
+              first so the dots above win the hit test. Deliberate cost, written
+              here: clicking a selected edge's body no longer toggles it deselected
+              — clicking empty canvas still does. */}
+          {routed && routePoints.slice(0, -1).map((p, i) => (
             <path
-              key={`grab-${seg}`}
-              d={d}
+              key={`grab-${i}`}
+              d={`M ${p.x} ${p.y} L ${routePoints[i + 1].x} ${routePoints[i + 1].y}`}
               fill="none"
               stroke="transparent"
               strokeWidth={14}
-              style={{ pointerEvents: 'stroke', cursor: 'grab' }}
-              onPointerDown={(e) => onLineBodyPointerDown(e, seg)}
+              style={{ pointerEvents: 'stroke', cursor: 'move' }}
+              onPointerDown={(e) => onLineBodyPointerDown(e, i)}
               onPointerMove={onAnchorPointerMove}
               onPointerUp={onAnchorPointerUp}
               onPointerCancel={onAnchorPointerCancel}
