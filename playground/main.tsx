@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import i18n from 'i18next'
-import { initReactI18next } from 'react-i18next'
+import { initReactI18next, useTranslation } from 'react-i18next'
 import { DataflowEditor, DataflowHostContext, registerDataflowMessages } from '@oatnil/ud-dataflow-diagram'
 import { usePlaygroundHost } from './host'
 import { LandingCard } from './LandingCard'
@@ -19,13 +19,61 @@ const HOST_STRINGS = {
   zh: { common: { cancel: '取消', create: '创建', delete: '删除', edit: '编辑', retry: '重试', save: '保存', saveAndClose: '保存并关闭', status: { error: '错误' } } },
 }
 
+/**
+ * UI language: an explicit choice (the EN/中文 toggle below) wins and is remembered;
+ * otherwise zh-language browsers get Chinese and everyone else gets English —
+ * English-first (owner, 2026-09-04), bilingual kept.
+ */
+const LANG_KEY = 'dataflow-playground:lang'
+const storedLang = (() => {
+  try { return localStorage.getItem(LANG_KEY) } catch { return null }
+})()
+
 i18n.use(initReactI18next).init({
   resources: { en: { translation: HOST_STRINGS.en }, zh: { translation: HOST_STRINGS.zh } },
-  lng: navigator.language.startsWith('zh') ? 'zh' : 'en',
+  lng: storedLang ?? (navigator.language.startsWith('zh') ? 'zh' : 'en'),
   fallbackLng: 'en',
   interpolation: { escapeValue: false },
 })
 registerDataflowMessages(i18n)
+
+/**
+ * The one language control the playground offers. Sits beside the canvas Controls
+ * (bottom-left) — the top-right belongs to the landing card and the AI dock.
+ */
+function LanguageToggle() {
+  // useTranslation (not the bare i18n object) so this component re-renders — and the
+  // active segment moves — when the language changes
+  const { i18n: live } = useTranslation()
+  const current = live.language.startsWith('zh') ? 'zh' : 'en'
+  const pick = (lang: 'en' | 'zh') => {
+    if (lang === current) return
+    live.changeLanguage(lang)
+    try { localStorage.setItem(LANG_KEY, lang) } catch { /* forgets, still switches */ }
+  }
+  const seg = (lang: 'en' | 'zh', label: string) => (
+    <button
+      type="button"
+      onClick={() => pick(lang)}
+      className="px-2 py-1 text-xs font-medium"
+      style={current === lang
+        ? { backgroundColor: '#1e293b', color: '#ffffff' }
+        : { backgroundColor: '#ffffff', color: '#475569' }}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <div
+      className="fixed bottom-4 left-14 z-[60] flex overflow-hidden rounded-lg"
+      style={{ border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)' }}
+      title="Language / 语言"
+    >
+      {seg('en', 'EN')}
+      {seg('zh', '中文')}
+    </div>
+  )
+}
 
 function App() {
   const { host, status, clearStatus, useOfficialEndpoint } = usePlaygroundHost()
@@ -46,6 +94,7 @@ function App() {
         autoSave
       />
       <LandingCard />
+      <LanguageToggle />
       {status && (
         <div className="fixed bottom-0 inset-x-0 z-50 border-t bg-white px-4 py-3 text-sm">
           <div className="mx-auto flex max-w-3xl items-start gap-3">
