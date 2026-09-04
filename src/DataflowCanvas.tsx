@@ -28,7 +28,6 @@ import CanvasMenu from './components/CanvasMenu'
 import AICollabPanel from './components/panels/AICollabPanel'
 import ImportSummaryBar from './components/panels/ImportSummaryBar'
 import AIGeneratePanel from './components/panels/AIGeneratePanel'
-import ProcessEditorPanel from './components/panels/ProcessEditorPanel'
 import NodeRawEditor from './components/panels/NodeRawEditor'
 import SetOperationToolbar from './components/panels/SetOperationToolbar'
 import PipeMarkerDefs from './components/PipeMarkerDefs'
@@ -294,10 +293,6 @@ function Flow({ store, embedMode }: FlowProps) {
     }
   }, [])
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false)
-  const [processEditorOpen, setProcessEditorOpen] = useState(false)
-  // Only the (currently dormant) ProcessEditorPanel reads this; the import doors
-  // that used to set it are retired (owner, 2026-09-04)
-  const [newNodePosition] = useState({ x: 100, y: 100 })
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; flowPosition: { x: number; y: number } } | null>(null)
   const [iconSidebarOpen, setIconSidebarOpen] = useState(true)  // Open by default
   const [lastCanvasClick, setLastCanvasClick] = useState<{ x: number; y: number } | null>(null)
@@ -681,12 +676,6 @@ function Flow({ store, embedMode }: FlowProps) {
 
         {/* Set operation toolbar — shown when exactly 2 JSON nodes are selected */}
         <SetOperationToolbar selectedNodeIds={selectedNodeIds} />
-
-        <ProcessEditorPanel
-          isOpen={processEditorOpen}
-          onClose={() => setProcessEditorOpen(false)}
-          position={newNodePosition}
-        />
 
         {contextMenu && (
           <ContextMenu

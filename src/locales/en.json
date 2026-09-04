@@ -153,20 +153,7 @@
     "ctrlEnterApply": "Ctrl+Enter to apply",
     "apply": "Apply",
     "dataMustBeObject": "Data must be a JSON object",
-    "missingNameField": "Missing required field: \"name\" (string)",
-    "processTitle": "Create Process Node",
-    "processName": "Process Name",
-    "loadSample": "Load sample",
-    "processNamePlaceholder": "e.g., concat_name_id, format_date",
-    "inputFields": "Input Fields",
-    "addInput": "Add input",
-    "outputFields": "Output Fields",
-    "addOutput": "Add output",
-    "outputFieldNamePlaceholder": "Output field name",
-    "processNameRequired": "Please enter a process name",
-    "inputRequired": "At least one input field is required",
-    "outputRequired": "At least one output field with expression is required",
-    "invalidExpression": "Invalid expression for \"{{name}}\": {{error}}"
+    "missingNameField": "Missing required field: \"name\" (string)"
   },
   "paste": {
     "added": "Imported {{nodes}} nodes and {{pipes}} connections",

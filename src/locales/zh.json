@@ -153,20 +153,7 @@
     "ctrlEnterApply": "Ctrl+Enter 应用",
     "apply": "应用",
     "dataMustBeObject": "数据必须是 JSON 对象",
-    "missingNameField": "缺少必填字段：\"name\"（字符串）",
-    "processTitle": "创建处理节点",
-    "processName": "处理名称",
-    "loadSample": "加载示例",
-    "processNamePlaceholder": "例如：concat_name_id、format_date",
-    "inputFields": "输入字段",
-    "addInput": "添加输入",
-    "outputFields": "输出字段",
-    "addOutput": "添加输出",
-    "outputFieldNamePlaceholder": "输出字段名",
-    "processNameRequired": "请输入处理名称",
-    "inputRequired": "至少需要一个输入字段",
-    "outputRequired": "至少需要一个带表达式的输出字段",
-    "invalidExpression": "\"{{name}}\" 的表达式无效：{{error}}"
+    "missingNameField": "缺少必填字段：\"name\"（字符串）"
   },
   "paste": {
     "added": "已导入 {{nodes}} 个节点、{{pipes}} 条连线",
