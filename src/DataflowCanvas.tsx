@@ -50,6 +50,9 @@ interface FlowProps {
   embedMode?: boolean
 }
 
+// Remembers whether the AI Collaborate dock was left open (design note faa64fe3).
+const AI_COLLAB_DOCK_KEY = 'ud-dataflow:ai-collab-dock'
+
 function Flow({ store, embedMode }: FlowProps) {
   const nodes = store((state) => state.nodes)
   const pipes = store((state) => state.pipes)
@@ -246,7 +249,25 @@ function Flow({ store, embedMode }: FlowProps) {
 
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonlImportOpen, setJsonlImportOpen] = useState(false)
-  const [aiCollabOpen, setAiCollabOpen] = useState(false)
+  // The AI Collaborate dock remembers whether it was left open across sessions —
+  // "keep it while I edit" is a way of working, not a per-visit choice (owner,
+  // 2026-09-04, design note faa64fe3 position C). First visit defaults to folded:
+  // the dock costs 360px of canvas, so only people who opened it pay for it.
+  const [aiCollabOpen, setAiCollabOpen] = useState(() => {
+    try {
+      return localStorage.getItem(AI_COLLAB_DOCK_KEY) === 'open'
+    } catch {
+      return false
+    }
+  })
+  const setAiCollabDock = useCallback((open: boolean) => {
+    setAiCollabOpen(open)
+    try {
+      localStorage.setItem(AI_COLLAB_DOCK_KEY, open ? 'open' : 'closed')
+    } catch {
+      // storage unavailable (private mode, SSR) — the dock still toggles, just forgets
+    }
+  }, [])
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false)
   const [processEditorOpen, setProcessEditorOpen] = useState(false)
   const [newNodePosition, setNewNodePosition] = useState({ x: 100, y: 100 })
@@ -292,15 +313,30 @@ function Flow({ store, embedMode }: FlowProps) {
     }))
   }, [getNodes, store])
 
+  /**
+   * The visible canvas in SCREEN pixels — measured from the pane element, not the window.
+   * The AI Collaborate dock (right side) takes real width away from the canvas, so the
+   * window would count the strip under the dock as canvas and pastes could land in it,
+   * off the visible pane (design note faa64fe3, position D). Falls back to the window
+   * only before the ref mounts.
+   */
+  const paneAreaRef = useRef<HTMLDivElement>(null)
+  const getPaneScreenRect = useCallback(() => {
+    const el = paneAreaRef.current
+    return el ? el.getBoundingClientRect() : new DOMRect(0, 0, window.innerWidth, window.innerHeight)
+  }, [])
+  const paneScreenCenter = useCallback(() => {
+    const r = getPaneScreenRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }, [getPaneScreenRect])
+
   const handleOpenJsonImport = useCallback(() => {
     // Place new node at center of viewport
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 100,
-      y: window.innerHeight / 2 - 100,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
     setNewNodePosition(position)
     setJsonImportOpen(true)
-  }, [screenToFlowPosition])
+  }, [screenToFlowPosition, paneScreenCenter])
 
   // Right-click context menu
   const handleContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
@@ -363,10 +399,10 @@ function Flow({ store, embedMode }: FlowProps) {
     }
   }, [contextMenu])
 
-  // AI Collaborate — the external-chat round trip panel (copy prompt / paste answer)
+  // AI Collaborate — every entry point (menu, toolbar, context menu) EXPANDS the dock
   const handleOpenAICollab = useCallback(() => {
-    setAiCollabOpen(true)
-  }, [])
+    setAiCollabDock(true)
+  }, [setAiCollabDock])
 
   // AI generate - opens the panel.
   // Offered only when the host has an `ai` member (host.ts): with none there is nothing
@@ -378,11 +414,8 @@ function Flow({ store, embedMode }: FlowProps) {
 
   // Get viewport center in flow coordinates (for placing imported nodes)
   const getViewportCenter = useCallback(() => {
-    return screenToFlowPosition({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    })
-  }, [screenToFlowPosition])
+    return screenToFlowPosition(paneScreenCenter())
+  }, [screenToFlowPosition, paneScreenCenter])
 
   /**
    * The visible canvas as a RECTANGLE in flow coordinates — the two screen corners run
@@ -393,74 +426,63 @@ function Flow({ store, embedMode }: FlowProps) {
    * zoom the rectangle is ten times wider in flow units than at 100%, so the same centre
    * describes wildly different amounts of room.
    *
-   * Derived from the window rather than the pane element, which makes it a slight
-   * OVERestimate whenever the canvas is inset (the editor's header bar). Harmless in the
-   * direction that matters: placement starts from the centre and works outward, so the
-   * error can only affect a node pushed to the very edge, and it never shrinks the
-   * rectangle below what is actually on screen.
+   * Measured from the pane element, not the window: the AI Collaborate dock takes real
+   * width from the canvas, and a window-based rectangle would tell editPlan the strip
+   * under the dock is a fine place to put nodes — a paste could then land entirely off
+   * the visible pane. The pane rect is exact; the window fallback (pre-mount only) keeps
+   * the old harmless overestimate.
    */
   const getViewportRect = useCallback(() => {
-    const topLeft = screenToFlowPosition({ x: 0, y: 0 })
-    const bottomRight = screenToFlowPosition({ x: window.innerWidth, y: window.innerHeight })
+    const r = getPaneScreenRect()
+    const topLeft = screenToFlowPosition({ x: r.left, y: r.top })
+    const bottomRight = screenToFlowPosition({ x: r.right, y: r.bottom })
     return {
       x: topLeft.x,
       y: topLeft.y,
       width: bottomRight.x - topLeft.x,
       height: bottomRight.y - topLeft.y,
     }
-  }, [screenToFlowPosition])
+  }, [screenToFlowPosition, getPaneScreenRect])
 
   // Canvas menu handlers (for non-context menu usage)
   const handleCanvasCreateNode = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 100,
-      y: window.innerHeight / 2 - 100,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
     addJsonNode('New Node', [], position)
-  }, [screenToFlowPosition, addJsonNode])
+  }, [screenToFlowPosition, paneScreenCenter, addJsonNode])
 
   const handleCanvasCreateNote = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 100,
-      y: window.innerHeight / 2 - 100,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
     addNoteNode('Note', '', position)
-  }, [screenToFlowPosition, addNoteNode])
+  }, [screenToFlowPosition, paneScreenCenter, addNoteNode])
 
   const handleCanvasCreateResource = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 100,
-      y: window.innerHeight / 2 - 100,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
     addResourceNode('Resource', undefined, position)
-  }, [screenToFlowPosition, addResourceNode])
+  }, [screenToFlowPosition, paneScreenCenter, addResourceNode])
 
   const handleCanvasCreateGroup = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 200,
-      y: window.innerHeight / 2 - 150,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 200, y: c.y - 150 })
     addGroupNode('Group', position)
-  }, [screenToFlowPosition, addGroupNode])
+  }, [screenToFlowPosition, paneScreenCenter, addGroupNode])
 
   const handleCanvasCreateShape = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 80,
-      y: window.innerHeight / 2 - 40,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 80, y: c.y - 40 })
     addShapeNode('Shape', 'rectangle', position)
-  }, [screenToFlowPosition, addShapeNode])
+  }, [screenToFlowPosition, paneScreenCenter, addShapeNode])
 
   // Helper: get placement position — use last canvas click, or viewport center as fallback
   const getPlacementPosition = useCallback((offsetX = 0, offsetY = 0) => {
     if (lastCanvasClick) {
       return { x: lastCanvasClick.x + offsetX, y: lastCanvasClick.y + offsetY }
     }
-    return screenToFlowPosition({
-      x: window.innerWidth / 2 + offsetX,
-      y: window.innerHeight / 2 + offsetY,
-    })
-  }, [lastCanvasClick, screenToFlowPosition])
+    const c = paneScreenCenter()
+    return screenToFlowPosition({ x: c.x + offsetX, y: c.y + offsetY })
+  }, [lastCanvasClick, screenToFlowPosition, paneScreenCenter])
 
   // Add icon from sidebar — place at last click or center
   const handleSidebarAddIcon = useCallback((name: string, icon: string) => {
@@ -488,26 +510,27 @@ function Flow({ store, embedMode }: FlowProps) {
   }, [addShapeNode, getPlacementPosition])
 
   const handleCanvasImportJson = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 100,
-      y: window.innerHeight / 2 - 100,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
     setNewNodePosition(position)
     setJsonImportOpen(true)
-  }, [screenToFlowPosition])
+  }, [screenToFlowPosition, paneScreenCenter])
 
   const handleCanvasImportJsonl = useCallback(() => {
-    const position = screenToFlowPosition({
-      x: window.innerWidth / 2 - 100,
-      y: window.innerHeight / 2 - 100,
-    })
+    const c = paneScreenCenter()
+    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
     setNewNodePosition(position)
     setJsonlImportOpen(true)
-  }, [screenToFlowPosition])
+  }, [screenToFlowPosition, paneScreenCenter])
 
   return (
     <FlowStoreContext.Provider value={store}>
-      <div className="w-full h-full relative">
+      {/* Flex row: the canvas pane plus the AI Collaborate dock. The dock takes real
+          width (not an overlay) so the whole pane stays editable while it is open —
+          the point of docking it (owner 2026-09-04, design note faa64fe3). Every
+          absolutely-positioned overlay stays anchored to the pane div, not this row. */}
+      <div className="w-full h-full flex">
+      <div ref={paneAreaRef} className="flex-1 min-w-0 h-full relative">
         <ReactFlow
           nodes={renderNodes}
           edges={styledEdges}
@@ -717,13 +740,6 @@ function Flow({ store, embedMode }: FlowProps) {
           />
         )}
 
-        <AICollabPanel
-          isOpen={aiCollabOpen}
-          onClose={() => setAiCollabOpen(false)}
-          getViewportCenter={getViewportCenter}
-          getViewportRect={getViewportRect}
-        />
-
         {/* What the last paste did, and the way back out of it. */}
         <ImportSummaryBar />
 
@@ -736,6 +752,16 @@ function Flow({ store, embedMode }: FlowProps) {
         )}
 
         <NodeRawEditor />
+      </div>
+
+      {/* Docked right of the canvas; stays mounted when folded so a half-written
+          answer or a just-copied prompt survives fold/unfold. */}
+      <AICollabPanel
+        expanded={aiCollabOpen}
+        onExpandedChange={setAiCollabDock}
+        getViewportCenter={getViewportCenter}
+        getViewportRect={getViewportRect}
+      />
       </div>
     </FlowStoreContext.Provider>
   )

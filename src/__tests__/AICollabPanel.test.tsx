@@ -40,13 +40,13 @@ const GRAPH = {
   pipes: [{ source: 'users', target: 'orders' }],
 };
 
-const renderPanel = (store = createFlowStore(), onClose = vi.fn()) => {
-  render(
+const renderPanel = (store = createFlowStore(), onExpandedChange = vi.fn()) => {
+  const view = render(
     <FlowStoreContext.Provider value={store}>
-      <AICollabPanel isOpen={true} onClose={onClose} />
+      <AICollabPanel expanded={true} onExpandedChange={onExpandedChange} />
     </FlowStoreContext.Provider>,
   );
-  return { store, onClose };
+  return { store, onExpandedChange, view };
 };
 
 describe('the three steps read as one flow', () => {
@@ -87,25 +87,28 @@ describe('the three steps read as one flow', () => {
 });
 
 describe('step 3 is the same paste door as every other entry', () => {
-  it('a pasted answer lands in the graph through the shared pipeline and closes the panel', () => {
-    const { store, onClose } = renderPanel();
+  it('a pasted answer lands through the shared pipeline — and the dock STAYS OPEN for the next round', () => {
+    const { store, onExpandedChange } = renderPanel();
     fireEvent.change(screen.getByRole('textbox'), {
       target: { value: '```json\n' + JSON.stringify(GRAPH) + '\n```' },
     });
     fireEvent.click(screen.getByRole('button', { name: /import.*answer/i }));
 
     expect(store.getState().nodes.map((n) => n.id).sort()).toEqual(['orders', 'users']);
-    expect(onClose).toHaveBeenCalled();
+    // Docked, not a popup (design note faa64fe3): success clears the textarea but
+    // never folds the panel — the round trip is rarely one round.
+    expect(onExpandedChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox')).toHaveValue('');
   });
 
   it('a truncated answer fails BY NAME — the panel stays open and tells the user what to do', () => {
     const truncated = JSON.stringify(GRAPH).slice(0, 60);
-    const { store, onClose } = renderPanel();
+    const { store, onExpandedChange } = renderPanel();
     fireEvent.change(screen.getByRole('textbox'), { target: { value: truncated } });
     fireEvent.click(screen.getByRole('button', { name: /import.*answer/i }));
 
     expect(store.getState().nodes).toHaveLength(0);
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onExpandedChange).not.toHaveBeenCalled();
     expect(screen.getByText(/incomplete|cut off/i)).toBeInTheDocument();
   });
 
@@ -113,5 +116,39 @@ describe('step 3 is the same paste door as every other entry', () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /import.*answer/i }));
     expect(screen.getByText(/please enter or upload/i)).toBeInTheDocument();
+  });
+});
+
+describe('the dock is a dock, not a popup', () => {
+  it('folding hides the panel but keeps a half-written answer — the popup lost it, the dock must not', () => {
+    const store = createFlowStore();
+    const rerenderWith = (expanded: boolean) =>
+      view.rerender(
+        <FlowStoreContext.Provider value={store}>
+          <AICollabPanel expanded={expanded} onExpandedChange={vi.fn()} />
+        </FlowStoreContext.Provider>,
+      );
+    const view = render(
+      <FlowStoreContext.Provider value={store}>
+        <AICollabPanel expanded={true} onExpandedChange={vi.fn()} />
+      </FlowStoreContext.Provider>,
+    );
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'node draft, half pasted' } });
+    rerenderWith(false);
+    expect(screen.getByRole('textbox', { hidden: true })).not.toBeVisible();
+    rerenderWith(true);
+    expect(screen.getByRole('textbox')).toHaveValue('node draft, half pasted');
+  });
+
+  it('folded, it still shows the way back in: an edge tab that expands the dock', () => {
+    const onExpandedChange = vi.fn();
+    render(
+      <FlowStoreContext.Provider value={createFlowStore()}>
+        <AICollabPanel expanded={false} onExpandedChange={onExpandedChange} />
+      </FlowStoreContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /ai collaborate/i }));
+    expect(onExpandedChange).toHaveBeenCalledWith(true);
   });
 });

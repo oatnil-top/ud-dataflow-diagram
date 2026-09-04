@@ -223,7 +223,8 @@
     "step3Title": "Step 3 · Paste the AI's answer",
     "step3Desc": "Commands or diagram JSON both work — a ``` fence is fine",
     "answerPlaceholder": "Paste the AI's answer here…",
-    "importAnswer": "Import answer"
+    "importAnswer": "Import answer",
+    "fold": "Fold panel"
   },
   "arrange": {
     "alignLeft": "Align left",
