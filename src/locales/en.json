@@ -236,6 +236,7 @@
     "alignRight": "Align right",
     "row": "Arrange in a row",
     "column": "Arrange in a column",
+    "grid": "Arrange in a grid",
     "skipped": "{{skipped}} selected node(s) are inside another group and were left out"
   }
 }

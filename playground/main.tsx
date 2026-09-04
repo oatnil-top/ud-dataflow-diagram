@@ -38,8 +38,8 @@ i18n.use(initReactI18next).init({
 registerDataflowMessages(i18n)
 
 /**
- * The one language control the playground offers. Sits beside the canvas Controls
- * (bottom-left) — the top-right belongs to the landing card and the AI dock.
+ * The one language control the playground offers, mounted in the editor header next
+ * to the export buttons (owner, 2026-09-04) via the `headerExtra` slot.
  */
 function LanguageToggle() {
   // useTranslation (not the bare i18n object) so this component re-renders — and the
@@ -65,8 +65,8 @@ function LanguageToggle() {
   )
   return (
     <div
-      className="fixed bottom-4 left-14 z-[60] flex overflow-hidden rounded-lg"
-      style={{ border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)' }}
+      className="flex overflow-hidden rounded-lg"
+      style={{ border: '1px solid #e2e8f0' }}
       title="Language / 语言"
     >
       {seg('en', 'EN')}
@@ -92,9 +92,9 @@ function App() {
         // the visitor's diagram), then `location.reload()` (dropped unsaved edits) — both
         // were answers to a question the page should never have asked.
         autoSave
+        headerExtra={<LanguageToggle />}
       />
       <LandingCard />
-      <LanguageToggle />
       {status && (
         <div className="fixed bottom-0 inset-x-0 z-50 border-t bg-white px-4 py-3 text-sm">
           <div className="mx-auto flex max-w-3xl items-start gap-3">

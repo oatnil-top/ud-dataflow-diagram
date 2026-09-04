@@ -65,6 +65,13 @@ interface DataflowEditorProps {
    * stays as an immediate save with feedback, for muscle memory.
    */
   autoSave?: boolean;
+  /**
+   * Host controls rendered in the header, left of the export buttons. A SLOT, not a
+   * feature: the playground puts its EN/中文 toggle here (owner, 2026-09-04 — "next to
+   * the export buttons"); ud passes nothing because its language lives in ud's own
+   * settings. The editor stays neutral about what the host mounts.
+   */
+  headerExtra?: React.ReactNode;
 }
 
 /**
@@ -74,7 +81,7 @@ interface DataflowEditorProps {
  * about the surrounding application's chrome. Whatever it needs from the app it asks for
  * through host.ts.
  */
-export default function DataflowEditor({ initialContent, diagram, onSaveGraph, onClose, saveShortcut = 'save-and-close', autoSave = false }: DataflowEditorProps) {
+export default function DataflowEditor({ initialContent, diagram, onSaveGraph, onClose, saveShortcut = 'save-and-close', autoSave = false, headerExtra }: DataflowEditorProps) {
   const { t } = useTranslation();
   const notify = useNotify();
   const [saving, setSaving] = useState(false);
@@ -272,6 +279,12 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
               <Loader2 className="h-3 w-3 animate-spin" />
               {t('resources.dataflow.editor.exporting')}
             </span>
+          )}
+          {headerExtra && (
+            <>
+              {headerExtra}
+              <div className="w-px h-4 bg-border mx-1" />
+            </>
           )}
           <Button variant="ghost" size="sm" onClick={handleExportPng} disabled={busy} title={t('resources.dataflow.editor.exportPng')}>
             <Image className="h-4 w-4" />

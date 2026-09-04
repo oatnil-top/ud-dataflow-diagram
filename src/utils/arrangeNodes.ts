@@ -1,9 +1,9 @@
 import { estimateNodeSize } from '../store/importFormats'
 
 /**
- * The four selection-arrangement operations behind the selection bar's buttons
- * (align left / align right / one row / one column). Pure function of the selected
- * nodes — the store applies the returned positions in one undo step.
+ * The selection-arrangement operations behind the selection bar's buttons
+ * (align left / align right / one row / one column / grid). Pure function of the
+ * selected nodes — the store applies the returned positions in one undo step.
  *
  * Coordinate spaces are the load-bearing constraint here. A child node's position is
  * RELATIVE to its parent group (React Flow parentId), so "align these" is only
@@ -18,7 +18,7 @@ import { estimateNodeSize } from '../store/importFormats'
  *    so the outcome never depends on selection order.
  */
 
-export type ArrangeOp = 'align-left' | 'align-right' | 'row' | 'column'
+export type ArrangeOp = 'align-left' | 'align-right' | 'row' | 'column' | 'grid'
 
 export interface ArrangeableNode {
   id: string
@@ -107,7 +107,7 @@ export function arrangeNodes(op: ArrangeOp, selected: ArrangeableNode[]): Arrang
       place(s.n.id, s.n.position, { x: cursor, y: minY })
       cursor += s.width + ARRANGE_GAP
     }
-  } else {
+  } else if (op === 'column') {
     const ordered = [...sized].sort(
       (a, b) => a.n.position.y - b.n.position.y || a.n.position.x - b.n.position.x || a.n.id.localeCompare(b.n.id),
     )
@@ -116,6 +116,32 @@ export function arrangeNodes(op: ArrangeOp, selected: ArrangeableNode[]): Arrang
       place(s.n.id, s.n.position, { x: minX, y: cursor })
       cursor += s.height + ARRANGE_GAP
     }
+  } else {
+    // Grid: ceil(sqrt(n)) columns — square-ish — filled in reading order (top-left
+    // to bottom-right of where the nodes already are). Columns are as wide as their
+    // widest member and rows as tall as their tallest, so a 110px icon next to a
+    // 320px table does not force icon columns to table width.
+    const ordered = [...sized].sort(
+      (a, b) => a.n.position.y - b.n.position.y || a.n.position.x - b.n.position.x || a.n.id.localeCompare(b.n.id),
+    )
+    const cols = Math.ceil(Math.sqrt(ordered.length))
+    const colWidth: number[] = []
+    const rowHeight: number[] = []
+    ordered.forEach((s, i) => {
+      const c = i % cols
+      const r = Math.floor(i / cols)
+      colWidth[c] = Math.max(colWidth[c] ?? 0, s.width)
+      rowHeight[r] = Math.max(rowHeight[r] ?? 0, s.height)
+    })
+    const colX: number[] = []
+    let x = minX
+    for (let c = 0; c < colWidth.length; c++) { colX[c] = x; x += colWidth[c] + ARRANGE_GAP }
+    const rowY: number[] = []
+    let y = minY
+    for (let r = 0; r < rowHeight.length; r++) { rowY[r] = y; y += rowHeight[r] + ARRANGE_GAP }
+    ordered.forEach((s, i) => {
+      place(s.n.id, s.n.position, { x: colX[i % cols], y: rowY[Math.floor(i / cols)] })
+    })
   }
 
   return { positions, movedIds, skippedIds }

@@ -106,3 +106,30 @@ describe('what a selection can carry without breaking the arrangement', () => {
     expect(posOf(r, 'b')).toEqual({ x: 50, y: 60 })
   })
 })
+
+describe('grid (矩阵排布, owner 2026-09-04)', () => {
+  it('five nodes make a ceil(sqrt(5))=3-column matrix in reading order, anchored top-left', () => {
+    // Reading order is y-strict then x (same rule as the column op) — so row-1
+    // fixtures share one y; a few px of hand-drag jitter WOULD reorder them, and
+    // that trade is the same one 'column' already made.
+    const r = arrangeNodes('grid', [
+      node('a', 30, 10), node('b', 200, 10), node('c', 400, 10),
+      node('d', 40, 300), node('e', 250, 310),
+    ])!
+    expect(posOf(r, 'a')).toEqual({ x: 30, y: 10 })
+    expect(posOf(r, 'b')).toEqual({ x: 30 + 100 + ARRANGE_GAP, y: 10 })
+    expect(posOf(r, 'c')).toEqual({ x: 30 + 2 * (100 + ARRANGE_GAP), y: 10 })
+    expect(posOf(r, 'd')).toEqual({ x: 30, y: 10 + 50 + ARRANGE_GAP })
+    expect(posOf(r, 'e')).toEqual({ x: 30 + 100 + ARRANGE_GAP, y: 10 + 50 + ARRANGE_GAP })
+  })
+
+  it('a wide node widens ONLY its own column — an icon next to a table keeps a narrow column', () => {
+    const r = arrangeNodes('grid', [
+      node('wide', 0, 0, 320, 50), node('slim1', 400, 0, 100, 50),
+      node('slim2', 0, 200, 100, 50), node('slim3', 400, 200, 100, 50),
+    ])!
+    // 2 columns: col 0 is 320 wide (wide, slim2), col 1 starts after 320+gap
+    expect(posOf(r, 'slim1')).toEqual({ x: 320 + ARRANGE_GAP, y: 0 })
+    expect(posOf(r, 'slim3')).toEqual({ x: 320 + ARRANGE_GAP, y: 50 + ARRANGE_GAP })
+  })
+})

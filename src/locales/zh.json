@@ -236,6 +236,7 @@
     "alignRight": "右对齐",
     "row": "横向排布",
     "column": "纵向排布",
+    "grid": "矩阵排布",
     "skipped": "{{skipped}} 个选中节点在其他分组内,未参与排布"
   }
 }

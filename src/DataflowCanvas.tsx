@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { Trash2, BotMessageSquare, AlignStartVertical, AlignEndVertical, StretchHorizontal, StretchVertical } from 'lucide-react'
+import { Trash2, BotMessageSquare, AlignStartVertical, AlignEndVertical, StretchHorizontal, StretchVertical, LayoutGrid } from 'lucide-react'
 import { graphToText } from './utils/graphToText'
 import { useDataflowHost, useNotify } from './host'
 import { useTranslation } from 'react-i18next'
@@ -651,6 +651,13 @@ function Flow({ store, embedMode }: FlowProps) {
                   title={t('resources.dataflow.arrange.column')}
                 >
                   <StretchVertical size={14} />
+                </button>
+                <button
+                  onClick={() => handleArrangeSelection('grid')}
+                  className="p-2.5 hover:bg-slate-100 text-slate-600 transition-colors"
+                  title={t('resources.dataflow.arrange.grid')}
+                >
+                  <LayoutGrid size={14} />
                 </button>
               </div>
             )}
