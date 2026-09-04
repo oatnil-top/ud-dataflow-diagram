@@ -165,16 +165,16 @@ const RULES_COMMON = `- ids are short ascii words; the display name may be in an
 - NEVER write positions, sizes or coordinates — I arrange the canvas myself.
 - Never invent ids I did not give you, except ids for nodes you are creating. If my request refers to my existing diagram and I have not pasted my current graph, ask me for it in plain text first.`
 
-const EXAMPLE_DATA = `node users 用户: id uuid, email string
-node orders 订单: id uuid, user_id uuid, total number
+const EXAMPLE_DATA = `node users Users: id uuid, email string
+node orders Orders: id uuid, user_id uuid, total number
 link users.id -> orders.user_id`
 const EXAMPLE_ARCH = `icon gw API Gateway: lucide:Globe
-group vpc 生产 VPC @network: users, orders, gw
+group vpc Production VPC @network: users, orders, gw
 link gw -> users`
 const EXAMPLE_ARCH_STANDALONE = `icon web Web App: lucide:Monitor
-icon api API 服务: lucide:Server
-icon db 数据库: lucide:Database
-group vpc 生产 VPC @network: api, db
+icon api API Service: lucide:Server
+icon db Database: lucide:Database
+group vpc Production VPC @network: api, db
 link web -> api
 link api -> db`
 
@@ -218,15 +218,15 @@ export const DATAFLOW_COPY_PROMPT_ARCH = compose(
  * asserts it parses with zero bad lines.
  */
 export const DATAFLOW_FULL_EXAMPLE = `# A complete answer for: "an online shop — users and orders in one VPC behind a gateway"
-node users 用户: id uuid, email string, address.city string
-node orders 订单: id uuid, user_id uuid, total number, status string
-node payments 支付: id uuid, order_id uuid, amount number
+node users Users: id uuid, email string, address.city string
+node orders Orders: id uuid, user_id uuid, total number, status string
+node payments Payments: id uuid, order_id uuid, amount number
 link users.id -> orders.user_id
 link orders.id -> payments.order_id
 icon web Web App: lucide:Monitor
 icon gw API Gateway: lucide:Globe
 icon cache Cache: lucide:MemoryStick
-group vpc 生产 VPC @network: users, orders, payments, cache
+group vpc Production VPC @network: users, orders, payments, cache
 link web -> gw
 link gw -> vpc
 link orders -> cache`
