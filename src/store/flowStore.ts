@@ -191,6 +191,13 @@ export interface ImportOptions {
    * ⛔ Never set together with `replace` — see importFormats.ts's file header.
    */
   sameIdMeansSameNode?: boolean
+  /**
+   * With `replace`: push the current canvas into undo history first. The plain
+   * replace stays history-free because it IS the initial document load; a
+   * user-initiated "import this whole file" (editor header) must instead be one
+   * Ctrl+Z away from the canvas it replaced.
+   */
+  snapshot?: boolean
 }
 
 /**
@@ -1090,9 +1097,16 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       }
 
       if (replace) {
-        // Initial document load: replace content wholesale, no undo entry
-        set({ nodes: parsed.nodes, pipes: parsed.pipes })
-        resetHistory()
+        // Initial document load: replace content wholesale, history wiped — unless
+        // the caller asked for an undo entry (opts.snapshot, header file import),
+        // where resetHistory would silently discard the snapshot just pushed
+        if (opts?.snapshot) {
+          pushSnapshot()
+          set({ nodes: parsed.nodes, pipes: parsed.pipes })
+        } else {
+          set({ nodes: parsed.nodes, pipes: parsed.pipes })
+          resetHistory()
+        }
       } else if (parsed.nodes.length > 0 || parsed.pipes.length > 0) {
         pushSnapshot()
         // A merge-import IS a paste: the new batch arrives selected and everything

@@ -20,7 +20,10 @@
     "drawioExported": "Exported as .drawio",
     "exportPng": "Export PNG",
     "exportJson": "Export JSON",
-    "exportDrawio": "Export .drawio"
+    "exportDrawio": "Export .drawio",
+    "importFile": "Import diagram file (JSON, or PNG exported here)",
+    "importedWholeFile": "Imported {{nodes}} nodes and {{pipes}} connections — Ctrl+Z restores the previous canvas",
+    "pngNoDiagram": "This PNG carries no embedded diagram data"
   },
   "menu": {
     "createNode": "Create Empty Node",

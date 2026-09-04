@@ -20,7 +20,10 @@
     "drawioExported": "已导出为 .drawio",
     "exportPng": "导出 PNG",
     "exportJson": "导出 JSON",
-    "exportDrawio": "导出 .drawio"
+    "exportDrawio": "导出 .drawio",
+    "importFile": "导入图文件(JSON,或本编辑器导出的 PNG)",
+    "importedWholeFile": "已导入 {{nodes}} 个节点、{{pipes}} 条连线 —— Ctrl+Z 可恢复原画布",
+    "pngNoDiagram": "这张 PNG 里没有内嵌的图数据"
   },
   "menu": {
     "createNode": "创建空节点",

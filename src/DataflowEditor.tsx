@@ -1,6 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, Save, Download, FileDown, Image } from 'lucide-react';
+import { X, Loader2, Save, Download, FileDown, Image, Upload } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   AlertDialog,
@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import DataflowCanvas, { type DataflowCanvasRef } from './DataflowCanvas';
-import { embedJsonInPng, captureCanvasToBlob } from './utils/pngEncoder';
+import { embedJsonInPng, extractJsonFromPng, captureCanvasToBlob } from './utils/pngEncoder';
 import { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio';
 import { startAutoSave } from './utils/autoSave';
 import './index.css';
@@ -146,6 +146,43 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
 
   const handleSaveOnly = useCallback(() => handleSave(false), [handleSave]);
   const handleSaveAndExit = useCallback(() => handleSave(true), [handleSave]);
+
+  // Import a WHOLE diagram file (owner, 2026-09-04): the DSL door creates and
+  // edits, but someone handed a complete exported file wants it opened entire.
+  // Replace semantics with an undo entry (importGraph snapshot option) — the
+  // canvas it replaces is one Ctrl+Z away, which is why there is no confirm
+  // dialog. Accepts the editor's own exports: graph JSON, or a PNG with the
+  // embedded diagram (embedJsonInPng wrote it there on export).
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    const store = flowStoreRef.current;
+    if (!file || !store) return;
+    try {
+      let text: string | null;
+      if (file.type === 'image/png' || file.name.toLowerCase().endsWith('.png')) {
+        text = await extractJsonFromPng(file);
+        if (!text) {
+          notify('error', t('resources.dataflow.editor.pngNoDiagram'));
+          return;
+        }
+      } else {
+        text = await file.text();
+      }
+      // Parse failures return null BEFORE any history is touched (importGraph),
+      // so a wrong file leaves the canvas and its undo stack untouched
+      const result = store.getState().importGraph(text, undefined, { replace: true, snapshot: true });
+      if (!result) {
+        notify('error', t('resources.dataflow.panel.importNotRecognized'));
+        return;
+      }
+      notify('info', t('resources.dataflow.editor.importedWholeFile', { nodes: result.addedNodes, pipes: result.addedPipes }));
+    } catch (error) {
+      console.error('Failed to import diagram file:', error);
+      notify('error', t('common.status.error'), error);
+    }
+  }, [notify, t]);
 
   // Ctrl+S → save, and close as well unless the host said its close is not free
   // (saveShortcut) or gave no close at all (no onClose — nowhere to go)
@@ -286,6 +323,16 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
               <div className="w-px h-4 bg-border mx-1" />
             </>
           )}
+          <input
+            ref={importFileRef}
+            type="file"
+            accept=".json,.txt,.png,application/json,text/plain,image/png"
+            onChange={handleImportFile}
+            style={{ display: 'none' }}
+          />
+          <Button variant="ghost" size="sm" onClick={() => importFileRef.current?.click()} disabled={busy} title={t('resources.dataflow.editor.importFile')}>
+            <Upload className="h-4 w-4" />
+          </Button>
           <Button variant="ghost" size="sm" onClick={handleExportPng} disabled={busy} title={t('resources.dataflow.editor.exportPng')}>
             <Image className="h-4 w-4" />
           </Button>
