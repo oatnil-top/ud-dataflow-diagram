@@ -64,4 +64,26 @@ describe('pipe route anchors', () => {
     expect(merged).toBeDefined()
     expect((merged?.data as PipeData | undefined)?.waypoints).toBeUndefined()
   })
+
+  it('a batch of routed pipes is ONE undo step', () => {
+    const store = createFlowStore()
+    store.getState().importGraph(JSON.stringify({
+      nodes: GRAPH.nodes,
+      pipes: [
+        { id: 'p1', source: 'a', target: 'b' },
+        { id: 'p2', source: 'b', target: 'a' },
+      ],
+    }), undefined, { replace: true })
+
+    store.getState().applyPipeWaypoints([
+      { pipeId: store.getState().pipes[0].id, waypoints: [{ x: 100, y: 100 }] },
+      { pipeId: store.getState().pipes[1].id, waypoints: [{ x: 200, y: 200 }] },
+    ])
+    expect((store.getState().pipes[0].data as PipeData).waypoints).toEqual([{ x: 100, y: 100 }])
+    expect((store.getState().pipes[1].data as PipeData).waypoints).toEqual([{ x: 200, y: 200 }])
+
+    store.getState().undo()
+    expect((store.getState().pipes[0].data as PipeData | undefined)?.waypoints).toBeUndefined()
+    expect((store.getState().pipes[1].data as PipeData | undefined)?.waypoints).toBeUndefined()
+  })
 })

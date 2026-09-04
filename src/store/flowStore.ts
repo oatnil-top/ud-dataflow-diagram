@@ -163,6 +163,14 @@ export interface FlowState {
   arrangeSelection: (op: ArrangeOp) => { moved: number; skipped: number }
 
   /**
+   * Write freshly routed waypoints onto several pipes in ONE undo step —
+   * the selection bar's batch auto-route (utils/autoRoute.ts computes them at the
+   * React Flow layer; the store only commits). `waypoints: undefined` clears a
+   * route (straight line), same convention as updatePipe.
+   */
+  applyPipeWaypoints: (updates: { pipeId: string; waypoints?: { x: number; y: number }[] }[]) => void
+
+  /**
    * The last paste-path import, for the summary bar to render and dismiss.
    *
    * Store state rather than a return value the entry points thread into a component,
@@ -897,6 +905,18 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
             ? { ...pipe, data: { ...pipe.data, ...data } as PipeData }
             : pipe
         ),
+      })
+    },
+
+    applyPipeWaypoints: (updates) => {
+      if (updates.length === 0) return
+      pushSnapshot()
+      const byId = new Map(updates.map((u) => [u.pipeId, u]))
+      set({
+        pipes: get().pipes.map((pipe) => {
+          const u = byId.get(pipe.id)
+          return u ? { ...pipe, data: { ...pipe.data, waypoints: u.waypoints } as PipeData } : pipe
+        }),
       })
     },
 

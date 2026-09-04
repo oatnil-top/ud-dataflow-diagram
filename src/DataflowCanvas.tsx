@@ -8,13 +8,14 @@ import {
   ConnectionMode,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
   useNodesInitialized,
   getNodesBounds,
   getViewportForBounds,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { Trash2, BotMessageSquare, AlignStartVertical, AlignEndVertical, StretchHorizontal, StretchVertical, LayoutGrid } from 'lucide-react'
+import { Trash2, BotMessageSquare, AlignStartVertical, AlignEndVertical, StretchHorizontal, StretchVertical, LayoutGrid, Route } from 'lucide-react'
 import { graphToText } from './utils/graphToText'
 import { useDataflowHost, useNotify } from './host'
 import { useTranslation } from 'react-i18next'
@@ -39,6 +40,7 @@ import { DiagramContext, type DiagramContextValue } from './diagramContext'
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts'
 import { useCanvasPaste } from './hooks/useCanvasPaste'
 import { computeGroupDropUpdates, applyGroupDropUpdates } from './utils/groupDrop'
+import { routePipeWaypoints } from './utils/autoRoute'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
 import { nodeTypes, edgeTypes } from './registry'
 import { useCollapsedNoteEdges, NOTE_EDGE_REVEALED } from './hooks/useCollapsedNoteEdges'
@@ -81,6 +83,7 @@ function Flow({ store, embedMode }: FlowProps) {
   const canRedo = store((state) => state.canRedo)
   const takeSnapshot = store((state) => state.takeSnapshot)
   const arrangeSelection = store((state) => state.arrangeSelection)
+  const applyPipeWaypoints = store((state) => state.applyPipeWaypoints)
 
   // Collapsed note/resource nodes render without their persisted size —
   // see stripSizeWhenCollapsed for why the store keeps it and the render drops it
@@ -159,6 +162,27 @@ function Flow({ store, embedMode }: FlowProps) {
   const { t } = useTranslation()
   const host = useDataflowHost()
   const notify = useNotify()
+
+  // Batch auto-route (owner, 2026-09-04): the selection bar routes every selected
+  // pipe, plus every pipe BOTH of whose endpoints are selected nodes — so
+  // rubber-banding a region and pressing the button tidies the lines inside it.
+  // utils/autoRoute.ts computes; applyPipeWaypoints commits the whole batch as
+  // ONE undo step.
+  const rfStoreApi = useStoreApi()
+  const routableSelection = useMemo(() => {
+    const selNodes = new Set(selectedNodeIds)
+    return pipes.filter((p) => p.selected || (selNodes.has(p.source) && selNodes.has(p.target)))
+  }, [pipes, selectedNodeIds])
+  const handleRouteSelection = useCallback(() => {
+    const lookup = rfStoreApi.getState().nodeLookup
+    const updates: { pipeId: string; waypoints?: { x: number; y: number }[] }[] = []
+    for (const pipe of routableSelection) {
+      const waypoints = routePipeWaypoints(lookup, pipe)
+      if (waypoints === null) continue
+      updates.push({ pipeId: pipe.id, waypoints: waypoints.length > 0 ? waypoints : undefined })
+    }
+    applyPipeWaypoints(updates)
+  }, [routableSelection, rfStoreApi, applyPipeWaypoints])
 
   const handleExportSelection = useCallback(() => {
     const selectedNodeIds = new Set(selectedNodes.map((n) => n.id))
@@ -658,6 +682,17 @@ function Flow({ store, embedMode }: FlowProps) {
                   title={t('resources.dataflow.arrange.grid')}
                 >
                   <LayoutGrid size={14} />
+                </button>
+              </div>
+            )}
+            {routableSelection.length > 0 && (
+              <div className="flex items-center bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden">
+                <button
+                  onClick={handleRouteSelection}
+                  className="p-2.5 hover:bg-slate-100 text-slate-600 transition-colors"
+                  title={t('resources.dataflow.pipe.autoRoute')}
+                >
+                  <Route size={14} />
                 </button>
               </div>
             )}

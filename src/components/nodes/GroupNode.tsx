@@ -8,6 +8,7 @@ import { sanitizeNodeUrl } from '../../utils/sanitizeUrl'
 import NodeIcon from '../icons/NodeIcon'
 import IconPicker from '../icons/IconPicker'
 import { isImeComposing } from '../../utils/ime'
+import { useMultiSelection } from '../../hooks/useMultiSelection'
 
 type GroupNodeType = Node<GroupNodeData, 'group'>
 
@@ -73,6 +74,8 @@ function resolveGroupStyle(data: GroupNodeData, depth: number): {
 }
 
 function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNodeType>) {
+  // Inline preset strip, same rule as FloatingNodePanel: hidden under multi-selection
+  const multiSelection = useMultiSelection()
   const { t } = useTranslation()
   const flowStore = useFlowStore()
   const updateGroupNode = flowStore((state) => state.updateGroupNode)
@@ -328,8 +331,8 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
         )}
       </div>
 
-      {/* Style preset picker — show when selected */}
-      {selected && (
+      {/* Style preset picker — show when selected (and not amid a multi-selection) */}
+      {selected && !multiSelection && (
         <div className="absolute bottom-1 left-2 flex items-center gap-1">
           {STYLE_PRESETS.map((preset) => {
             const isActive = data.stylePreset === preset.id

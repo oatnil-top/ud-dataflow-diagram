@@ -2,12 +2,12 @@ import type { ReactNode } from 'react'
 import { useCallback, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { useStore, useStoreApi, useViewport, useReactFlow, getSmoothStepPath, type Edge, type ReactFlowState, type InternalNode } from '@xyflow/react'
+import { useStore, useStoreApi, useViewport, useReactFlow, getSmoothStepPath, type Edge, type ReactFlowState } from '@xyflow/react'
 import { Trash2, Route } from 'lucide-react'
 import { useFlowStore } from '../store/flowStoreContext'
 import type { PipeData, PipeMarker, PipeLineStyle } from '../types'
 import { isImeComposing } from '../utils/ime'
-import { routeOrthogonal, type RouteBox } from '../utils/edgeRouter'
+import { handleCenter, routePipeWaypoints } from '../utils/autoRoute'
 
 interface PipeWithSelection extends Edge<PipeData> {
   selected?: boolean
@@ -17,22 +17,6 @@ interface PipeWithSelection extends Edge<PipeData> {
 const selectedPipeSelector = (state: ReactFlowState) =>
   (state.edges as PipeWithSelection[]).find((e) => e.selected)
 
-// Absolute flow position of a handle's center. With ConnectionMode.Loose the
-// perimeter handles are all type=source, so a pipe's targetHandle may only be
-// found in the source list — search both.
-function handleCenter(node: InternalNode, handleId: string | null | undefined) {
-  const all = [
-    ...(node.internals.handleBounds?.source ?? []),
-    ...(node.internals.handleBounds?.target ?? []),
-  ]
-  if (all.length === 0) return null
-  const h = (handleId ? all.find((hb) => hb.id === handleId) : undefined) ?? all[0]
-  return {
-    x: node.internals.positionAbsolute.x + h.x + h.width / 2,
-    y: node.internals.positionAbsolute.y + h.y + h.height / 2,
-    position: h.position,
-  }
-}
 
 // Fallback anchor when we have no click point for the selected pipe (marquee or
 // programmatic selection, or right after a reconnect): the midpoint of the
@@ -234,30 +218,8 @@ export default function PipeMenu({ clickAnchor }: { clickAnchor?: PipeMenuClickA
   // as a wall). One updatePipe = one undo step, like every other pipe edit.
   const handleAutoRoute = useCallback(() => {
     if (!selectedPipe || !updatePipe) return
-    const state = storeApi.getState()
-    const src = state.nodeLookup.get(selectedPipe.source)
-    const tgt = state.nodeLookup.get(selectedPipe.target)
-    if (!src || !tgt) return
-    const s = handleCenter(src, selectedPipe.sourceHandle)
-    const g = handleCenter(tgt, selectedPipe.targetHandle)
-    if (!s || !g) return
-    const skip = new Set<string>()
-    for (const terminal of [src, tgt]) {
-      let cur: InternalNode | undefined = terminal
-      while (cur) {
-        skip.add(cur.id)
-        cur = cur.parentId ? state.nodeLookup.get(cur.parentId) : undefined
-      }
-    }
-    const obstacles: RouteBox[] = []
-    for (const [nid, n] of state.nodeLookup) {
-      if (skip.has(nid)) continue
-      const w = n.measured?.width
-      const h = n.measured?.height
-      if (typeof w !== 'number' || typeof h !== 'number') continue
-      obstacles.push({ x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, width: w, height: h })
-    }
-    const waypoints = routeOrthogonal({ x: s.x, y: s.y }, { x: g.x, y: g.y }, obstacles)
+    const waypoints = routePipeWaypoints(storeApi.getState().nodeLookup, selectedPipe)
+    if (waypoints === null) return
     updatePipe(selectedPipe.id, { waypoints: waypoints.length > 0 ? waypoints : undefined })
   }, [selectedPipe, updatePipe, storeApi])
 
