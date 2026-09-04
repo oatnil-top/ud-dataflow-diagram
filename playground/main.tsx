@@ -43,35 +43,27 @@ registerDataflowMessages(i18n)
  */
 function LanguageToggle() {
   // useTranslation (not the bare i18n object) so this component re-renders — and the
-  // active segment moves — when the language changes
+  // label flips — when the language changes
   const { i18n: live } = useTranslation()
   const current = live.language.startsWith('zh') ? 'zh' : 'en'
-  const pick = (lang: 'en' | 'zh') => {
-    if (lang === current) return
-    live.changeLanguage(lang)
-    try { localStorage.setItem(LANG_KEY, lang) } catch { /* forgets, still switches */ }
+  // ONE button, labeled with the language it switches TO, written in that language
+  // (owner, 2026-09-04): the person who needs to switch is exactly the person who
+  // recognizes that word — nobody stares at a segmented control half in a script
+  // they cannot read.
+  const next = current === 'zh' ? 'en' : 'zh'
+  const switchTo = () => {
+    live.changeLanguage(next)
+    try { localStorage.setItem(LANG_KEY, next) } catch { /* forgets, still switches */ }
   }
-  const seg = (lang: 'en' | 'zh', label: string) => (
+  return (
     <button
       type="button"
-      onClick={() => pick(lang)}
-      className="px-2 py-1 text-xs font-medium"
-      style={current === lang
-        ? { backgroundColor: '#1e293b', color: '#ffffff' }
-        : { backgroundColor: '#ffffff', color: '#475569' }}
+      onClick={switchTo}
+      className="px-2.5 py-1 text-xs font-medium rounded-lg hover:bg-slate-100 transition-colors"
+      style={{ border: '1px solid #e2e8f0', color: '#475569', backgroundColor: '#ffffff' }}
     >
-      {label}
+      {next === 'zh' ? '中文' : 'English'}
     </button>
-  )
-  return (
-    <div
-      className="flex overflow-hidden rounded-lg"
-      style={{ border: '1px solid #e2e8f0' }}
-      title="Language / 语言"
-    >
-      {seg('en', 'EN')}
-      {seg('zh', '中文')}
-    </div>
   )
 }
 
