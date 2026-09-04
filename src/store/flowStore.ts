@@ -106,7 +106,7 @@ export interface FlowState {
   updateGroupNode: (nodeId: string, data: Partial<GroupNodeData>) => void
   updateIconNode: (nodeId: string, data: Partial<IconNodeData>) => void
   updateShapeNode: (nodeId: string, data: Partial<ShapeNodeData>) => void
-  updatePipe: (pipeId: string, data: Partial<Pick<PipeData, 'description' | 'sourceMarker' | 'targetMarker' | 'color' | 'lineWidth' | 'lineStyle' | 'animated' | 'labelOffset'>>) => void
+  updatePipe: (pipeId: string, data: Partial<Pick<PipeData, 'description' | 'sourceMarker' | 'targetMarker' | 'color' | 'lineWidth' | 'lineStyle' | 'animated' | 'labelOffset' | 'waypoints'>>) => void
   reconnectPipe: (oldPipe: Pipe, newConnection: Connection) => void
 
   // Hover (see hoveredNodeId). Two co-writers on purpose and safely: NoteNode's own

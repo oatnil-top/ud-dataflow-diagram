@@ -168,6 +168,17 @@ export interface PipeData extends ElementData {
   // stacked labels can read as one false sentence.
   labelOffset?: { x: number; y: number }
   /**
+   * User-placed route anchors, in FLOW coordinates, ordered source → target (owner,
+   * 2026-09-04). Present = the route is the user's: straight segments through every
+   * anchor (utils/edgePath.ts); absent = React Flow's smoothstep routing as before.
+   * Persisted with the document like every other pipe-data field (exportGraph keeps
+   * pipe.data wholesale). ABSOLUTE points, not offsets, on purpose: an anchor pins a
+   * bend to a place on the canvas — moving a node should not drag the whole route
+   * with it, that is what the anchor exists to prevent. Deliberately NOT sent to
+   * models: graphToContext serializes pipes as source/target/handles only.
+   */
+  waypoints?: { x: number; y: number }[]
+  /**
    * Transient (render-only, never persisted — like ResourceNodeData.uploading): this
    * pipe has a COLLAPSED note on one end, so it is muted, and whether the pointer is
    * currently revealing it. Written at the render boundary by DataflowCanvas /

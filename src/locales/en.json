@@ -81,6 +81,8 @@
     "flow": "Flow",
     "animatedFlow": "Animated flow",
     "delete": "Delete pipe",
+    "anchorTitle": "Drag to route the line; double-click to remove",
+    "addAnchorTitle": "Add a route anchor",
     "markerNone": "None",
     "markerArrow": "Arrow",
     "markerOne": "One",

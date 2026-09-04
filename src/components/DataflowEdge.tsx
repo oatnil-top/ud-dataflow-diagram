@@ -9,6 +9,8 @@ import {
 } from '@xyflow/react'
 import type { PipeData, PipeMarker, PipeLineStyle } from '../types'
 import { useFlowStore } from '../store/flowStoreContext'
+import { useTranslation } from 'react-i18next'
+import { buildWaypointPath, polylineMidpoint, segmentMidpoints, type Point } from '../utils/edgePath'
 
 type DataflowEdgeProps = EdgeProps<Edge<PipeData>>
 
@@ -34,7 +36,7 @@ function DataflowEdge({
 }: DataflowEdgeProps) {
   // Orthogonal routing with rounded corners — right-angle connectors keep
   // dense architecture diagrams readable where bezier curves turn to spaghetti
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const [stepPath, stepLabelX, stepLabelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
@@ -43,6 +45,20 @@ function DataflowEdge({
     targetPosition,
     borderRadius: 8,
   })
+
+  // Route anchors (owner, 2026-09-04): with waypoints the route is the USER'S —
+  // straight segments through every anchor (utils/edgePath.ts), smoothstep otherwise.
+  // liveWaypoints carries an in-flight drag; the committed truth lives on pipe data.
+  const [liveWaypoints, setLiveWaypoints] = useState<Point[] | null>(null)
+  const waypoints = liveWaypoints ?? data?.waypoints ?? []
+  const routed = waypoints.length > 0
+  const routePoints: Point[] = routed
+    ? [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }]
+    : []
+  const routeMid = routed ? polylineMidpoint(routePoints) : null
+  const edgePath = routed ? buildWaypointPath(routePoints) : stepPath
+  const labelX = routeMid ? routeMid.x : stepLabelX
+  const labelY = routeMid ? routeMid.y : stepLabelY
 
   const description = data?.description
 
@@ -106,6 +122,70 @@ function DataflowEdge({
     setLiveOffset(null)
   }
 
+  // ---- route anchors: drag to move, click a segment midpoint to add, ----
+  // ---- double-click an anchor to remove. Same commit discipline as the ----
+  // ---- label: live state while dragging, ONE updatePipe (one undo step) ----
+  // ---- on release, computed from the event's own coordinates. ----
+  const { t } = useTranslation()
+  const wpDragRef = useRef<{ index: number; startX: number; startY: number; base: Point; fresh: boolean } | null>(null)
+
+  const startWaypointDrag = (e: React.PointerEvent<SVGCircleElement>, index: number, base: Point, fresh: boolean, initial: Point[]) => {
+    if (!interactive || e.button !== 0) return
+    e.stopPropagation()
+    wpDragRef.current = { index, startX: e.clientX, startY: e.clientY, base, fresh }
+    setLiveWaypoints(initial)
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* ignore */ }
+  }
+  const onAnchorPointerDown = (e: React.PointerEvent<SVGCircleElement>, index: number) => {
+    const current = data?.waypoints ?? []
+    startWaypointDrag(e, index, current[index], false, [...current])
+  }
+  // Pointer-down on a segment midpoint INSERTS an anchor there and starts dragging
+  // it — add and place are one gesture. A plain click (no move) still adds: the
+  // midpoint is a sensible place for a bend to start its life.
+  const onAddAnchorPointerDown = (e: React.PointerEvent<SVGCircleElement>, segmentIndex: number, at: Point) => {
+    const current = data?.waypoints ?? []
+    const next = [...current.slice(0, segmentIndex), { ...at }, ...current.slice(segmentIndex)]
+    startWaypointDrag(e, segmentIndex, at, true, next)
+  }
+  const onAnchorPointerMove = (e: React.PointerEvent<SVGCircleElement>) => {
+    const drag = wpDragRef.current
+    if (!drag || !liveWaypoints) return
+    const dx = (e.clientX - drag.startX) / zoom
+    const dy = (e.clientY - drag.startY) / zoom
+    const moved = liveWaypoints.map((p, i) =>
+      i === drag.index ? { x: drag.base.x + dx, y: drag.base.y + dy } : p)
+    setLiveWaypoints(moved)
+  }
+  const onAnchorPointerUp = (e: React.PointerEvent<SVGCircleElement>) => {
+    const drag = wpDragRef.current
+    wpDragRef.current = null
+    if (!drag || !liveWaypoints) return
+    const dx = (e.clientX - drag.startX) / zoom
+    const dy = (e.clientY - drag.startY) / zoom
+    // A fresh anchor commits even unmoved (the click placed it); an existing one
+    // only commits when it actually went somewhere — no no-op undo steps.
+    if (drag.fresh || Math.abs(dx) >= 2 || Math.abs(dy) >= 2) {
+      const committed = liveWaypoints.map((p, i) =>
+        i === drag.index
+          ? { x: Math.round(drag.base.x + dx), y: Math.round(drag.base.y + dy) }
+          : { x: Math.round(p.x), y: Math.round(p.y) })
+      updatePipe(id, { waypoints: committed })
+    }
+    setLiveWaypoints(null)
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+  }
+  const onAnchorPointerCancel = () => {
+    wpDragRef.current = null
+    setLiveWaypoints(null)
+  }
+  const removeAnchor = (index: number) => {
+    const current = data?.waypoints ?? []
+    const next = current.filter((_, i) => i !== index)
+    // undefined, not []: the key disappears from the saved document entirely
+    updatePipe(id, { waypoints: next.length > 0 ? next : undefined })
+  }
+
   const labelOffset = liveOffset ?? data?.labelOffset ?? { x: 0, y: 0 }
   const sourceMarker: PipeMarker = data?.sourceMarker || 'none'
   const targetMarker: PipeMarker = data?.targetMarker || 'none'
@@ -154,6 +234,58 @@ function DataflowEdge({
             fill="#22c55e" stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
           <circle className="pipe-endpoint-affordance" cx={targetX} cy={targetY} r={6.5}
             fill="#22c55e" stroke="#ffffff" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+        </>
+      )}
+
+      {/* Route anchors — shown while the edge is selected. Blue filled dots are the
+          anchors themselves (drag to move, double-click to remove); hollow faint dots
+          sit on segment midpoints (and, before any anchor exists, on the path's
+          midpoint) and grow an anchor when grabbed. */}
+      {interactive && selected && (
+        <>
+          {waypoints.map((p, i) => (
+            <circle
+              key={`wp-${i}`}
+              cx={p.x}
+              cy={p.y}
+              r={5}
+              fill="#3b82f6"
+              stroke="#ffffff"
+              strokeWidth={1.5}
+              style={{ pointerEvents: 'all', cursor: 'grab' }}
+              onPointerDown={(e) => onAnchorPointerDown(e, i)}
+              onPointerMove={onAnchorPointerMove}
+              onPointerUp={onAnchorPointerUp}
+              onPointerCancel={onAnchorPointerCancel}
+              onDoubleClick={(e) => { e.stopPropagation(); removeAnchor(i) }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <title>{t('resources.dataflow.pipe.anchorTitle')}</title>
+            </circle>
+          ))}
+          {(routed
+            ? segmentMidpoints(routePoints).map((mid, seg) => ({ mid, seg }))
+            : [{ mid: { x: stepLabelX, y: stepLabelY }, seg: 0 }]
+          ).map(({ mid, seg }) => (
+            <circle
+              key={`add-${seg}`}
+              cx={mid.x}
+              cy={mid.y}
+              r={4}
+              fill="#ffffff"
+              stroke="#94a3b8"
+              strokeWidth={1.5}
+              opacity={0.85}
+              style={{ pointerEvents: 'all', cursor: 'copy' }}
+              onPointerDown={(e) => onAddAnchorPointerDown(e, seg, mid)}
+              onPointerMove={onAnchorPointerMove}
+              onPointerUp={onAnchorPointerUp}
+              onPointerCancel={onAnchorPointerCancel}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <title>{t('resources.dataflow.pipe.addAnchorTitle')}</title>
+            </circle>
+          ))}
         </>
       )}
 

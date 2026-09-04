@@ -326,6 +326,13 @@ function parseReactFlowFormat(
   }
 
   const claimPipeId = createIdAllocator((ctx.existingPipes ?? []).map((p) => p.id), ctx.generatePipeId)
+  // Route anchors (PipeData.waypoints) are ABSOLUTE flow points. A merge/paste
+  // shifts the incoming nodes (offsetX, or centering on the viewport) but nothing
+  // here re-derives per-pipe anchor positions — so on any shifted import the
+  // anchors are dropped and the pipe falls back to automatic routing, which is
+  // honest where a route bent around nodes that are no longer there would lie.
+  // Opening a document (replace, no shift) keeps them exactly.
+  const routeShifted = offsetX !== 0 || Boolean(ctx.viewportCenter)
   const resolved = rawPipes.map((pipe) => ({
     ...pipe,
     type: pipe.type || 'dataflow',
@@ -333,6 +340,9 @@ function parseReactFlowFormat(
     target: oldToNewId[pipe.target] || pipe.target,
     sourceHandle: remapHandle(pipe.sourceHandle ?? undefined),
     targetHandle: remapHandle(pipe.targetHandle ?? undefined),
+    ...(routeShifted && (pipe.data as { waypoints?: unknown } | undefined)?.waypoints
+      ? { data: { ...pipe.data, waypoints: undefined } as Pipe['data'] }
+      : {}),
   }))
 
   // Paste mode only: a pipe whose endpoints are neither being imported nor already on
