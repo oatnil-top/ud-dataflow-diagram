@@ -163,12 +163,13 @@ export interface FlowState {
   arrangeSelection: (op: ArrangeOp) => { moved: number; skipped: number }
 
   /**
-   * Write freshly routed waypoints onto several pipes in ONE undo step —
-   * the selection bar's batch auto-route (utils/autoRoute.ts computes them at the
-   * React Flow layer; the store only commits). `waypoints: undefined` clears a
-   * route (straight line), same convention as updatePipe.
+   * Write freshly routed waypoints — and, when routing reassigned them, endpoint
+   * handles — onto several pipes in ONE undo step (utils/autoRoute.ts computes at
+   * the React Flow layer; the store only commits). `waypoints: undefined` clears a
+   * route (straight line); an ABSENT sourceHandle/targetHandle leaves that end
+   * alone — the asymmetry is deliberate, handles are never cleared by routing.
    */
-  applyPipeWaypoints: (updates: { pipeId: string; waypoints?: { x: number; y: number }[] }[]) => void
+  applyPipeWaypoints: (updates: { pipeId: string; waypoints?: { x: number; y: number }[]; sourceHandle?: string; targetHandle?: string }[]) => void
 
   /**
    * The last paste-path import, for the summary bar to render and dismiss.
@@ -915,7 +916,13 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       set({
         pipes: get().pipes.map((pipe) => {
           const u = byId.get(pipe.id)
-          return u ? { ...pipe, data: { ...pipe.data, waypoints: u.waypoints } as PipeData } : pipe
+          if (!u) return pipe
+          return {
+            ...pipe,
+            ...(u.sourceHandle ? { sourceHandle: u.sourceHandle } : {}),
+            ...(u.targetHandle ? { targetHandle: u.targetHandle } : {}),
+            data: { ...pipe.data, waypoints: u.waypoints } as PipeData,
+          }
         }),
       })
     },

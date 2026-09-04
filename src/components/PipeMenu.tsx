@@ -7,7 +7,7 @@ import { Trash2, Route } from 'lucide-react'
 import { useFlowStore } from '../store/flowStoreContext'
 import type { PipeData, PipeMarker, PipeLineStyle } from '../types'
 import { isImeComposing } from '../utils/ime'
-import { handleCenter, routePipeWaypoints } from '../utils/autoRoute'
+import { handleCenter, routePipe } from '../utils/autoRoute'
 
 interface PipeWithSelection extends Edge<PipeData> {
   selected?: boolean
@@ -171,6 +171,7 @@ export default function PipeMenu({ clickAnchor }: { clickAnchor?: PipeMenuClickA
   const flowStore = useFlowStore()
   const onPipesChange = flowStore((s) => s.onPipesChange)
   const updatePipe = flowStore((s) => s.updatePipe)
+  const applyPipeWaypoints = flowStore((s) => s.applyPipeWaypoints)
   const storeApi = useStoreApi()
   // useViewport keeps this component re-rendering on pan/zoom; the actual
   // flow→screen math is flowToScreenPosition, which also accounts for the
@@ -217,11 +218,18 @@ export default function PipeMenu({ clickAnchor }: { clickAnchor?: PipeMenuClickA
   // their ancestor groups (a route out of a group must not treat its own group
   // as a wall). One updatePipe = one undo step, like every other pipe edit.
   const handleAutoRoute = useCallback(() => {
-    if (!selectedPipe || !updatePipe) return
-    const waypoints = routePipeWaypoints(storeApi.getState().nodeLookup, selectedPipe)
-    if (waypoints === null) return
-    updatePipe(selectedPipe.id, { waypoints: waypoints.length > 0 ? waypoints : undefined })
-  }, [selectedPipe, updatePipe, storeApi])
+    if (!selectedPipe) return
+    const route = routePipe(storeApi.getState().nodeLookup, selectedPipe)
+    if (route === null) return
+    // applyPipeWaypoints, not updatePipe: routing may reassign the endpoint
+    // handles, which live on the pipe itself, not in its data
+    applyPipeWaypoints([{
+      pipeId: selectedPipe.id,
+      waypoints: route.waypoints.length > 0 ? route.waypoints : undefined,
+      ...(route.sourceHandle ? { sourceHandle: route.sourceHandle } : {}),
+      ...(route.targetHandle ? { targetHandle: route.targetHandle } : {}),
+    }])
+  }, [selectedPipe, applyPipeWaypoints, storeApi])
 
   if (!selectedPipe || !fallbackAnchor) return null
 

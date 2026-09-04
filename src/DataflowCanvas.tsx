@@ -40,7 +40,7 @@ import { DiagramContext, type DiagramContextValue } from './diagramContext'
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts'
 import { useCanvasPaste } from './hooks/useCanvasPaste'
 import { computeGroupDropUpdates, applyGroupDropUpdates } from './utils/groupDrop'
-import { routePipeWaypoints } from './utils/autoRoute'
+import { routePipe } from './utils/autoRoute'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
 import { nodeTypes, edgeTypes } from './registry'
 import { useCollapsedNoteEdges, NOTE_EDGE_REVEALED } from './hooks/useCollapsedNoteEdges'
@@ -175,11 +175,16 @@ function Flow({ store, embedMode }: FlowProps) {
   }, [pipes, selectedNodeIds])
   const handleRouteSelection = useCallback(() => {
     const lookup = rfStoreApi.getState().nodeLookup
-    const updates: { pipeId: string; waypoints?: { x: number; y: number }[] }[] = []
+    const updates: Parameters<typeof applyPipeWaypoints>[0] = []
     for (const pipe of routableSelection) {
-      const waypoints = routePipeWaypoints(lookup, pipe)
-      if (waypoints === null) continue
-      updates.push({ pipeId: pipe.id, waypoints: waypoints.length > 0 ? waypoints : undefined })
+      const route = routePipe(lookup, pipe)
+      if (route === null) continue
+      updates.push({
+        pipeId: pipe.id,
+        waypoints: route.waypoints.length > 0 ? route.waypoints : undefined,
+        ...(route.sourceHandle ? { sourceHandle: route.sourceHandle } : {}),
+        ...(route.targetHandle ? { targetHandle: route.targetHandle } : {}),
+      })
     }
     applyPipeWaypoints(updates)
   }, [routableSelection, rfStoreApi, applyPipeWaypoints])
