@@ -2,11 +2,12 @@ import type { ReactNode } from 'react'
 import { useCallback, useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { useStore, useViewport, useReactFlow, getSmoothStepPath, type Edge, type ReactFlowState, type InternalNode } from '@xyflow/react'
-import { Trash2 } from 'lucide-react'
+import { useStore, useStoreApi, useViewport, useReactFlow, getSmoothStepPath, type Edge, type ReactFlowState, type InternalNode } from '@xyflow/react'
+import { Trash2, Route } from 'lucide-react'
 import { useFlowStore } from '../store/flowStoreContext'
 import type { PipeData, PipeMarker, PipeLineStyle } from '../types'
 import { isImeComposing } from '../utils/ime'
+import { routeOrthogonal, type RouteBox } from '../utils/edgeRouter'
 
 interface PipeWithSelection extends Edge<PipeData> {
   selected?: boolean
@@ -186,6 +187,7 @@ export default function PipeMenu({ clickAnchor }: { clickAnchor?: PipeMenuClickA
   const flowStore = useFlowStore()
   const onPipesChange = flowStore((s) => s.onPipesChange)
   const updatePipe = flowStore((s) => s.updatePipe)
+  const storeApi = useStoreApi()
   // useViewport keeps this component re-rendering on pan/zoom; the actual
   // flow→screen math is flowToScreenPosition, which also accounts for the
   // canvas pane's own offset in the window (a bare `flow*zoom+view` misses
@@ -223,6 +225,41 @@ export default function PipeMenu({ clickAnchor }: { clickAnchor?: PipeMenuClickA
     if (!selectedPipe || !updatePipe) return
     updatePipe(selectedPipe.id, updates)
   }, [selectedPipe, updatePipe])
+
+  // Auto-route (utils/edgeRouter.ts): an EXPLICIT act that writes waypoints — the
+  // same anchors the user drags — never a background recompute, so a hand-tuned
+  // route is only ever replaced by pressing this again. Endpoints come from the
+  // real handle centers; obstacles are every node except the two terminals and
+  // their ancestor groups (a route out of a group must not treat its own group
+  // as a wall). One updatePipe = one undo step, like every other pipe edit.
+  const handleAutoRoute = useCallback(() => {
+    if (!selectedPipe || !updatePipe) return
+    const state = storeApi.getState()
+    const src = state.nodeLookup.get(selectedPipe.source)
+    const tgt = state.nodeLookup.get(selectedPipe.target)
+    if (!src || !tgt) return
+    const s = handleCenter(src, selectedPipe.sourceHandle)
+    const g = handleCenter(tgt, selectedPipe.targetHandle)
+    if (!s || !g) return
+    const skip = new Set<string>()
+    for (const terminal of [src, tgt]) {
+      let cur: InternalNode | undefined = terminal
+      while (cur) {
+        skip.add(cur.id)
+        cur = cur.parentId ? state.nodeLookup.get(cur.parentId) : undefined
+      }
+    }
+    const obstacles: RouteBox[] = []
+    for (const [nid, n] of state.nodeLookup) {
+      if (skip.has(nid)) continue
+      const w = n.measured?.width
+      const h = n.measured?.height
+      if (typeof w !== 'number' || typeof h !== 'number') continue
+      obstacles.push({ x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, width: w, height: h })
+    }
+    const waypoints = routeOrthogonal({ x: s.x, y: s.y }, { x: g.x, y: g.y }, obstacles)
+    updatePipe(selectedPipe.id, { waypoints: waypoints.length > 0 ? waypoints : undefined })
+  }, [selectedPipe, updatePipe, storeApi])
 
   if (!selectedPipe || !fallbackAnchor) return null
 
@@ -363,8 +400,15 @@ export default function PipeMenu({ clickAnchor }: { clickAnchor?: PipeMenuClickA
           onChange={(v) => handleMarkerChange('targetMarker', v)}
         />
 
-        {/* Delete */}
-        <div className="flex justify-end border-t border-slate-100 pt-1">
+        {/* Auto-route + Delete */}
+        <div className="flex justify-between border-t border-slate-100 pt-1">
+          <button
+            onClick={handleAutoRoute}
+            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-colors"
+            title={t('resources.dataflow.pipe.autoRoute')}
+          >
+            <Route size={14} />
+          </button>
           <button
             onClick={handleDelete}
             className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"

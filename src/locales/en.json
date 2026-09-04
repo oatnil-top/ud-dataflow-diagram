@@ -81,6 +81,7 @@
     "flow": "Flow",
     "animatedFlow": "Animated flow",
     "delete": "Delete pipe",
+    "autoRoute": "Auto-route around nodes",
     "anchorTitle": "Drag to route the line; double-click to remove",
     "addAnchorTitle": "Add a route anchor",
     "markerNone": "None",

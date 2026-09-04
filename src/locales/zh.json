@@ -81,6 +81,7 @@
     "flow": "流动",
     "animatedFlow": "流动动画",
     "delete": "删除连线",
+    "autoRoute": "自动布线(绕开节点)",
     "anchorTitle": "拖动调整走向,双击删除",
     "addAnchorTitle": "添加走向锚点",
     "markerNone": "无",
