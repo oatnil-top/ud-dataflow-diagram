@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FileJson, Download, Trash2, Play, Sparkles, BotMessageSquare, Undo2, Redo2 } from 'lucide-react'
+import { Download, Trash2, Play, Sparkles, BotMessageSquare, Undo2, Redo2 } from 'lucide-react'
 import { useNotify } from '../../host'
 import { useFlowStore } from '../../store/flowStoreContext'
 
@@ -63,7 +63,6 @@ const exampleGraph = {
 }
 
 interface ToolbarProps {
-  onOpenJsonImport: () => void
   /** Opens the AI Collaborate panel — the one door for the external-chat round trip
    *  (copy prompt / copy diagram / paste answer). It replaced this toolbar's import
    *  popover and the three copy entries that used to hide in the export popover. */
@@ -74,7 +73,7 @@ interface ToolbarProps {
   getViewportCenter?: () => { x: number; y: number }
 }
 
-export default function Toolbar({ onOpenJsonImport, onOpenAICollab, onAIGenerate, embedMode, getViewportCenter }: ToolbarProps) {
+export default function Toolbar({ onOpenAICollab, onAIGenerate, embedMode, getViewportCenter }: ToolbarProps) {
   const { t } = useTranslation()
   const notify = useNotify()
   const flowStore = useFlowStore()
@@ -123,16 +122,6 @@ export default function Toolbar({ onOpenJsonImport, onOpenAICollab, onAIGenerate
 
   return (
     <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-10 flex flex-wrap gap-1.5 sm:gap-2 max-w-[calc(100vw-1rem)] sm:max-w-none">
-      {/* Add JSON Node */}
-      <button
-        onClick={onOpenJsonImport}
-        className="flex items-center justify-center gap-1.5 sm:gap-2 bg-slate-700 hover:bg-slate-800 text-white px-2.5 sm:px-4 py-2 rounded-lg shadow-md transition-all text-xs sm:text-sm font-medium"
-        title={t('resources.dataflow.toolbar.importJson')}
-      >
-        <FileJson size={16} />
-        <span className="hidden sm:inline">{t('resources.dataflow.toolbar.importJson')}</span>
-      </button>
-
       {/* AI Generate */}
       {onAIGenerate && (
         <button

@@ -25,7 +25,6 @@ import Toolbar from './components/panels/Toolbar'
 import PipeMenu from './components/PipeMenu'
 import ContextMenu from './components/ContextMenu'
 import CanvasMenu from './components/CanvasMenu'
-import JsonImportPanel from './components/panels/JsonImportPanel'
 import AICollabPanel from './components/panels/AICollabPanel'
 import ImportSummaryBar from './components/panels/ImportSummaryBar'
 import AIGeneratePanel from './components/panels/AIGeneratePanel'
@@ -275,7 +274,6 @@ function Flow({ store, embedMode }: FlowProps) {
     })
   }, [pipes, fieldColorMap, pipeColorMap, noteEdgeClasses])
 
-  const [jsonImportOpen, setJsonImportOpen] = useState(false)
   // The AI Collaborate dock remembers whether it was left open across sessions —
   // "keep it while I edit" is a way of working, not a per-visit choice (owner,
   // 2026-09-04, design note faa64fe3 position C). First visit defaults to folded:
@@ -297,7 +295,9 @@ function Flow({ store, embedMode }: FlowProps) {
   }, [])
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false)
   const [processEditorOpen, setProcessEditorOpen] = useState(false)
-  const [newNodePosition, setNewNodePosition] = useState({ x: 100, y: 100 })
+  // Only the (currently dormant) ProcessEditorPanel reads this; the import doors
+  // that used to set it are retired (owner, 2026-09-04)
+  const [newNodePosition] = useState({ x: 100, y: 100 })
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; flowPosition: { x: number; y: number } } | null>(null)
   const [iconSidebarOpen, setIconSidebarOpen] = useState(true)  // Open by default
   const [lastCanvasClick, setLastCanvasClick] = useState<{ x: number; y: number } | null>(null)
@@ -357,14 +357,6 @@ function Flow({ store, embedMode }: FlowProps) {
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
   }, [getPaneScreenRect])
 
-  const handleOpenJsonImport = useCallback(() => {
-    // Place new node at center of viewport
-    const c = paneScreenCenter()
-    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
-    setNewNodePosition(position)
-    setJsonImportOpen(true)
-  }, [screenToFlowPosition, paneScreenCenter])
-
   // Right-click context menu
   const handleContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
     event.preventDefault()
@@ -411,13 +403,6 @@ function Flow({ store, embedMode }: FlowProps) {
   }, [contextMenu, addShapeNode])
 
   // handleCreateIconFromMenu removed — sidebar handles icon creation
-
-  const handleImportJsonFromMenu = useCallback(() => {
-    if (contextMenu) {
-      setNewNodePosition(contextMenu.flowPosition)
-      setJsonImportOpen(true)
-    }
-  }, [contextMenu])
 
   // AI Collaborate — every entry point (menu, toolbar, context menu) EXPANDS the dock
   const handleOpenAICollab = useCallback(() => {
@@ -529,13 +514,6 @@ function Flow({ store, embedMode }: FlowProps) {
     addShapeNode('Shape', 'rectangle', getPlacementPosition())
   }, [addShapeNode, getPlacementPosition])
 
-  const handleCanvasImportJson = useCallback(() => {
-    const c = paneScreenCenter()
-    const position = screenToFlowPosition({ x: c.x - 100, y: c.y - 100 })
-    setNewNodePosition(position)
-    setJsonImportOpen(true)
-  }, [screenToFlowPosition, paneScreenCenter])
-
   return (
     <FlowStoreContext.Provider value={store}>
       {/* Flex row: the canvas pane plus the AI Collaborate dock. The dock takes real
@@ -622,7 +600,6 @@ function Flow({ store, embedMode }: FlowProps) {
         {/* Only show toolbar in standalone mode */}
         {!embedMode && (
           <Toolbar
-            onOpenJsonImport={handleOpenJsonImport}
             onOpenAICollab={handleOpenAICollab}
             onAIGenerate={onAIGenerate}
             embedMode={embedMode}
@@ -705,12 +682,6 @@ function Flow({ store, embedMode }: FlowProps) {
         {/* Set operation toolbar — shown when exactly 2 JSON nodes are selected */}
         <SetOperationToolbar selectedNodeIds={selectedNodeIds} />
 
-        <JsonImportPanel
-          isOpen={jsonImportOpen}
-          onClose={() => setJsonImportOpen(false)}
-          position={newNodePosition}
-        />
-
         <ProcessEditorPanel
           isOpen={processEditorOpen}
           onClose={() => setProcessEditorOpen(false)}
@@ -728,7 +699,6 @@ function Flow({ store, embedMode }: FlowProps) {
             onCreateGroup={handleCreateGroupFromMenu}
             onCreateShape={handleCreateShapeFromMenu}
             onShowElements={() => setIconSidebarOpen(true)}
-            onImportJson={handleImportJsonFromMenu}
             onOpenAICollab={handleOpenAICollab}
             onAIGenerate={onAIGenerate}
           />
@@ -753,7 +723,6 @@ function Flow({ store, embedMode }: FlowProps) {
             onCreateResource={handleCanvasCreateResource}
             onCreateGroup={handleCanvasCreateGroup}
             onCreateShape={handleCanvasCreateShape}
-            onImportJson={handleCanvasImportJson}
             onOpenAICollab={handleOpenAICollab}
             onAIGenerate={onAIGenerate}
             canUndo={canUndo}

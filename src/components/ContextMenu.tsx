@@ -1,4 +1,4 @@
-import { Plus, FileJson, BotMessageSquare, Sparkles, StickyNote, Group, FileIcon, Layers, Hexagon } from 'lucide-react'
+import { Plus, BotMessageSquare, Sparkles, StickyNote, Group, FileIcon, Layers, Hexagon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface ContextMenuProps {
@@ -11,12 +11,11 @@ interface ContextMenuProps {
   onCreateGroup: () => void
   onCreateShape: () => void
   onShowElements: () => void
-  onImportJson: () => void
   onOpenAICollab?: () => void
   onAIGenerate?: () => void
 }
 
-export default function ContextMenu({ x, y, onClose, onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onShowElements, onImportJson, onOpenAICollab, onAIGenerate }: ContextMenuProps) {
+export default function ContextMenu({ x, y, onClose, onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onShowElements, onOpenAICollab, onAIGenerate }: ContextMenuProps) {
   const { t } = useTranslation()
   return (
     <>
@@ -108,17 +107,6 @@ export default function ContextMenu({ x, y, onClose, onCreateNode, onCreateNote,
           {t('resources.dataflow.menu.elementsPanel')}
         </button>
         <div className="my-1" style={{ borderTop: '1px solid #e2e8f0' }} />
-        <button
-          onClick={() => {
-            onImportJson()
-            onClose()
-          }}
-          className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors hover:bg-slate-100"
-          style={{ color: '#1e293b' }}
-        >
-          <FileJson size={14} style={{ color: '#64748b' }} />
-          {t('resources.dataflow.menu.importJson')}
-        </button>
         {onOpenAICollab && (
           <>
             <div className="my-1" style={{ borderTop: '1px solid #e2e8f0' }} />

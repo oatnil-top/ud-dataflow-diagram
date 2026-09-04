@@ -1,4 +1,4 @@
-import { Plus, FileJson, BotMessageSquare, Sparkles, StickyNote, Group, FileIcon, Hexagon, Undo2, Redo2 } from 'lucide-react'
+import { Plus, BotMessageSquare, Sparkles, StickyNote, Group, FileIcon, Hexagon, Undo2, Redo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface CanvasMenuProps {
@@ -7,7 +7,6 @@ interface CanvasMenuProps {
   onCreateResource: () => void
   onCreateGroup: () => void
   onCreateShape: () => void
-  onImportJson: () => void
   onOpenAICollab: () => void
   onAIGenerate?: () => void
   canUndo?: boolean
@@ -16,7 +15,7 @@ interface CanvasMenuProps {
   onRedo?: () => void
 }
 
-export default function CanvasMenu({ onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onImportJson, onOpenAICollab, onAIGenerate, canUndo, canRedo, onUndo, onRedo }: CanvasMenuProps) {
+export default function CanvasMenu({ onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onOpenAICollab, onAIGenerate, canUndo, canRedo, onUndo, onRedo }: CanvasMenuProps) {
   const { t } = useTranslation()
   return (
     <div
@@ -62,14 +61,6 @@ export default function CanvasMenu({ onCreateNode, onCreateNote, onCreateResourc
         title={t('resources.dataflow.menu.addShape')}
       >
         <Hexagon size={16} />
-      </button>
-      <button
-        onClick={onImportJson}
-        className="p-2 rounded transition-colors hover:bg-slate-100"
-        style={{ color: '#64748b' }}
-        title={t('resources.dataflow.menu.importJson')}
-      >
-        <FileJson size={16} />
       </button>
       <div className="w-px h-5 mx-0.5" style={{ backgroundColor: '#e2e8f0' }} />
       <button
