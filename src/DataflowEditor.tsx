@@ -34,7 +34,14 @@ interface DataflowEditorProps {
    * whether that is a `dataflows` row or a file in `resources` is the page's business.
    */
   onSaveGraph: (graphJson: string) => Promise<void>;
-  onClose: () => void;
+  /**
+   * Leave the editor — the host's function, because only the host knows where "out" is.
+   * OPTIONAL (owner, 2026-09-04): a page with nowhere to go (the standalone playground —
+   * the editor IS the page) passes nothing, and the editor then renders no Save & Close
+   * and no X, and Ctrl+S is save-only regardless of `saveShortcut`. Closing is embed
+   * furniture: it only means something where a surrounding app takes the user back.
+   */
+  onClose?: () => void;
   /**
    * What Ctrl/Cmd+S does. Default `'save-and-close'`.
    *
@@ -96,7 +103,7 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
         flowStoreRef.current?.getState().markClean();
         notify('info', t('resources.dataflow.saveSuccess'));
         if (shouldClose) {
-          onClose();
+          onClose?.();
         }
       }
     } catch (error) {
@@ -111,18 +118,19 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
   const handleSaveOnly = useCallback(() => handleSave(false), [handleSave]);
   const handleSaveAndExit = useCallback(() => handleSave(true), [handleSave]);
 
-  // Ctrl+S → save, and close as well unless the host said its close is not free (saveShortcut)
+  // Ctrl+S → save, and close as well unless the host said its close is not free
+  // (saveShortcut) or gave no close at all (no onClose — nowhere to go)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        if (saveShortcut === 'save') handleSaveOnly();
+        if (saveShortcut === 'save' || !onClose) handleSaveOnly();
         else handleSaveAndExit();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSaveAndExit, handleSaveOnly, saveShortcut]);
+  }, [handleSaveAndExit, handleSaveOnly, saveShortcut, onClose]);
 
   // Warn on browser tab/window close if dirty
   useEffect(() => {
@@ -140,7 +148,7 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
     if (flowStoreRef.current?.getState().isDirty) {
       setShowQuitConfirm(true);
     } else {
-      onClose();
+      onClose?.();
     }
   }, [onClose]);
 
@@ -246,17 +254,22 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
             <FileDown className="h-4 w-4" />
           </Button>
           <div className="w-px h-4 bg-border mx-1" />
-          <Button variant="ghost" size="sm" onClick={handleSaveOnly} disabled={busy}>
+          <Button variant={onClose ? 'ghost' : 'default'} size="sm" onClick={handleSaveOnly} disabled={busy}>
             <Save className="h-4 w-4 mr-1" />
             {t('common.save')}
           </Button>
-          <Button variant="default" size="sm" onClick={handleSaveAndExit} disabled={busy}>
-            <Save className="h-4 w-4 mr-1" />
-            {t('common.saveAndClose')}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleClose} disabled={busy}>
-            <X className="h-4 w-4" />
-          </Button>
+          {/* Closing is embed furniture — a host with no onClose has nowhere to go */}
+          {onClose && (
+            <>
+              <Button variant="default" size="sm" onClick={handleSaveAndExit} disabled={busy}>
+                <Save className="h-4 w-4 mr-1" />
+                {t('common.saveAndClose')}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleClose} disabled={busy}>
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
       </div>
 

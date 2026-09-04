@@ -37,16 +37,11 @@ function App() {
       <DataflowEditor
         initialContent={initial}
         onSaveGraph={async (g) => { localStorage.setItem(DOC_KEY, g) }}
-        // Ctrl+S must not reach onClose on this page: closing here reloads, and the default
-        // save-and-close made the save key discard the visitor's view right after writing it.
-        saveShortcut="save"
-        // "Close" on a page with nowhere to go = drop unsaved edits and come back to the last
-        // saved diagram (a first visit comes back to the sample). ⛔ It must not delete what
-        // was saved: this used to `removeItem(DOC_KEY)`, which made every close — and, through
-        // save-and-close, every Ctrl+S — a silent wipe of the visitor's diagram. The cost of
-        // that fix is that "back to the pristine sample" is no longer reachable from the UI
-        // once you have saved; losing saved work is the worse of the two.
-        onClose={() => { location.reload() }}
+        // No onClose: the editor IS this page, there is nowhere to go (owner, 2026-09-04).
+        // The editor then hides Save & Close and the X, and Ctrl+S is save-only. History
+        // worth keeping: close used to `removeItem(DOC_KEY)` (every close silently wiped
+        // the visitor's diagram), then `location.reload()` (dropped unsaved edits) — both
+        // were answers to a question the page should never have asked.
       />
       <LandingCard />
       {status && (
