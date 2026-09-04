@@ -15,6 +15,7 @@ import {
 import DataflowCanvas, { type DataflowCanvasRef } from './DataflowCanvas';
 import { embedJsonInPng, captureCanvasToBlob } from './utils/pngEncoder';
 import { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio';
+import { startAutoSave } from './utils/autoSave';
 import './index.css';
 import type { FlowStore } from './store/flowStore';
 import type { DiagramContextValue } from './diagramContext';
@@ -56,6 +57,14 @@ interface DataflowEditorProps {
    * Both toolbar buttons are unaffected either way — Save and Save & Close stay.
    */
   saveShortcut?: 'save' | 'save-and-close';
+  /**
+   * Save on edit, debounced, silently — and hide the Save button (owner, 2026-09-04:
+   * on the standalone page even Save is embed furniture). Opt-in because it is a call
+   * about the host's storage, not about the editor: per-pause writes are free against
+   * the playground's localStorage and a different decision against a server. Ctrl+S
+   * stays as an immediate save with feedback, for muscle memory.
+   */
+  autoSave?: boolean;
 }
 
 /**
@@ -65,7 +74,7 @@ interface DataflowEditorProps {
  * about the surrounding application's chrome. Whatever it needs from the app it asks for
  * through host.ts.
  */
-export default function DataflowEditor({ initialContent, diagram, onSaveGraph, onClose, saveShortcut = 'save-and-close' }: DataflowEditorProps) {
+export default function DataflowEditor({ initialContent, diagram, onSaveGraph, onClose, saveShortcut = 'save-and-close', autoSave = false }: DataflowEditorProps) {
   const { t } = useTranslation();
   const notify = useNotify();
   const [saving, setSaving] = useState(false);
@@ -76,9 +85,22 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const canvasRefRef = useRef<DataflowCanvasRef | null>(null);
 
+  // State as well as ref: the autosave effect needs to (re)run when the store arrives,
+  // and a ref write does not re-render
+  const [liveStore, setLiveStore] = useState<FlowStore | null>(null);
   const handleStoreReady = useCallback((store: FlowStore) => {
     flowStoreRef.current = store;
+    // Updater form is load-bearing: a FlowStore IS a function (a bound zustand hook),
+    // and setLiveStore(store) would make React call it as an updater
+    setLiveStore(() => store);
   }, []);
+
+  // Autosave (standalone hosts, see the prop doc) — silent by design: a toast per
+  // editing pause would be noise. Failures stay dirty and retry on the next edit.
+  useEffect(() => {
+    if (!autoSave || !liveStore) return;
+    return startAutoSave(liveStore, onSaveGraph);
+  }, [autoSave, liveStore, onSaveGraph]);
 
   const handleCanvasRefReady = useCallback((ref: DataflowCanvasRef) => {
     canvasRefRef.current = ref;
@@ -132,16 +154,23 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSaveAndExit, handleSaveOnly, saveShortcut, onClose]);
 
-  // Warn on browser tab/window close if dirty
+  // On browser tab/window close with unsaved edits: warn — except under autosave,
+  // where the debounce may simply not have fired yet, so flush instead. The flush
+  // relies on the host's save starting synchronously (localStorage.setItem runs
+  // before the first await); a host whose save is truly async keeps manual save.
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (flowStoreRef.current?.getState().isDirty) {
-        e.preventDefault();
+      const state = flowStoreRef.current?.getState();
+      if (!state?.isDirty) return;
+      if (autoSave) {
+        void onSaveGraph(state.exportGraph());
+        return;
       }
+      e.preventDefault();
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  }, [autoSave, onSaveGraph]);
 
   // Close button: show confirmation if dirty, otherwise close immediately
   const handleClose = useCallback(() => {
@@ -254,10 +283,14 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
             <FileDown className="h-4 w-4" />
           </Button>
           <div className="w-px h-4 bg-border mx-1" />
-          <Button variant={onClose ? 'ghost' : 'default'} size="sm" onClick={handleSaveOnly} disabled={busy}>
-            <Save className="h-4 w-4 mr-1" />
-            {t('common.save')}
-          </Button>
+          {/* Under autosave the button disappears with the rest of the save ceremony;
+              Ctrl+S remains as an immediate save with feedback */}
+          {!autoSave && (
+            <Button variant={onClose ? 'ghost' : 'default'} size="sm" onClick={handleSaveOnly} disabled={busy}>
+              <Save className="h-4 w-4 mr-1" />
+              {t('common.save')}
+            </Button>
+          )}
           {/* Closing is embed furniture — a host with no onClose has nowhere to go */}
           {onClose && (
             <>

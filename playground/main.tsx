@@ -37,11 +37,13 @@ function App() {
       <DataflowEditor
         initialContent={initial}
         onSaveGraph={async (g) => { localStorage.setItem(DOC_KEY, g) }}
-        // No onClose: the editor IS this page, there is nowhere to go (owner, 2026-09-04).
-        // The editor then hides Save & Close and the X, and Ctrl+S is save-only. History
+        // No onClose, and autosave (owner, 2026-09-04): the editor IS this page — close,
+        // Save & Close, and the Save button are all embed furniture here. Edits write to
+        // localStorage on pause; Ctrl+S still saves immediately for muscle memory. History
         // worth keeping: close used to `removeItem(DOC_KEY)` (every close silently wiped
         // the visitor's diagram), then `location.reload()` (dropped unsaved edits) — both
         // were answers to a question the page should never have asked.
+        autoSave
       />
       <LandingCard />
       {status && (
