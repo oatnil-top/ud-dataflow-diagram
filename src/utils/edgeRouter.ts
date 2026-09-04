@@ -32,6 +32,16 @@ export interface RouteOptions {
   margin?: number
   /** Extra cost per 90° turn, in flow units of equivalent length. */
   bendPenalty?: number
+  /**
+   * How strongly cross-travel is pulled toward the CORRIDOR MIDLINE (owner,
+   * 2026-09-04, from a real fan-out screenshot: ten edges out of one gateway all
+   * turned at the source column and stacked their verticals there — the fork
+   * belongs in the middle, like the editor's own smoothstep default). Perpendicular
+   * steps cost extra in proportion to their distance from the midline between the
+   * endpoints, so vertical runs — and therefore forks — settle mid-corridor.
+   * 0 disables. Soft: obstacles still reroute freely.
+   */
+  midForkWeight?: number
 }
 
 interface InflatedBox { x: number; y: number; w: number; h: number }
@@ -52,6 +62,22 @@ export function routeOrthogonal(
 ): Point[] {
   const margin = options.margin ?? 24
   const bendPenalty = options.bendPenalty ?? 40
+  const midForkWeight = options.midForkWeight ?? 1
+
+  // Corridor midline (see midForkWeight): the primary axis is the longer span;
+  // perpendicular travel is surcharged by its distance from the midline. The
+  // midline coordinate joins the candidate grid so the preferred fork line exists.
+  const dxSpan = Math.abs(goal.x - start.x)
+  const dySpan = Math.abs(goal.y - start.y)
+  const primaryHorizontal = dxSpan >= dySpan
+  const halfSpan = Math.max(primaryHorizontal ? dxSpan : dySpan, 1) / 2
+  const midX = (start.x + goal.x) / 2
+  const midY = (start.y + goal.y) / 2
+  const crossSurcharge = (perpAxisCoord: number): number => {
+    if (midForkWeight === 0 || halfSpan < 20) return 0
+    const dist = Math.abs(perpAxisCoord - (primaryHorizontal ? midX : midY))
+    return (dist / halfSpan) * midForkWeight
+  }
 
   const contains = (b: InflatedBox, p: Point) => p.x > b.x && p.x < b.x + b.w && p.y > b.y && p.y < b.y + b.h
   const boxes: InflatedBox[] = obstacles
@@ -65,8 +91,8 @@ export function routeOrthogonal(
   const vBlocked = (x: number, y1: number, y2: number) =>
     boxes.some((b) => x > b.x && x < b.x + b.w && Math.min(y1, y2) < b.y + b.h && Math.max(y1, y2) > b.y)
 
-  const xsSet = new Set<number>([start.x, goal.x])
-  const ysSet = new Set<number>([start.y, goal.y])
+  const xsSet = new Set<number>([start.x, goal.x, midX])
+  const ysSet = new Set<number>([start.y, goal.y, midY])
   for (const b of boxes) {
     xsSet.add(b.x); xsSet.add(b.x + b.w)
     ysSet.add(b.y); ysSet.add(b.y + b.h)
@@ -131,7 +157,15 @@ export function routeOrthogonal(
       if (nx < 0 || ny < 0 || nx >= xs.length || ny >= ys.length) continue
       if (ndir === 0 && hBlocked(xs[ix], xs[nx], ys[iy])) continue
       if (ndir === 1 && vBlocked(xs[ix], ys[iy], ys[ny])) continue
-      const stepCost = ndir === 0 ? Math.abs(xs[nx] - xs[ix]) : Math.abs(ys[ny] - ys[iy])
+      const stepLen = ndir === 0 ? Math.abs(xs[nx] - xs[ix]) : Math.abs(ys[ny] - ys[iy])
+      // Perpendicular (to the primary axis) travel pays the midline surcharge —
+      // for a left-to-right corridor, a vertical run at the source column costs
+      // ~double a vertical run at mid, which is what moves the fork to the middle
+      const perpendicular = primaryHorizontal ? ndir === 1 : ndir === 0
+      const surcharge = perpendicular
+        ? crossSurcharge(primaryHorizontal ? xs[ix] : ys[iy])
+        : 0
+      const stepCost = stepLen * (1 + surcharge)
       const ng = g + stepCost + (dir !== 2 && dir !== ndir ? bendPenalty : 0)
       const nk = stateKey(nx, ny, ndir)
       if (ng < (gScore.get(nk) ?? Infinity)) {

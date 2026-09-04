@@ -34,13 +34,24 @@ describe('routeOrthogonal', () => {
     expect(routeOrthogonal({ x: 0, y: 50 }, { x: 300, y: 50 }, [])).toEqual([])
   })
 
-  it('an L needs exactly one bend, at a corner of the two endpoints', () => {
+  it('an offset pair forks at the corridor midline, like smoothstep does (owner 2026-09-04)', () => {
     const wps = routeOrthogonal({ x: 0, y: 0 }, { x: 100, y: 80 }, [])
-    expect(wps).toHaveLength(1)
-    const corner = wps[0]
-    const isCorner =
-      (corner.x === 100 && corner.y === 0) || (corner.x === 0 && corner.y === 80)
-    expect(isCorner).toBe(true)
+    expect(wps).toEqual([{ x: 50, y: 0 }, { x: 50, y: 80 }])
+  })
+
+  it('a fan-out forks mid-corridor, not at the source column — verticals must not stack on the source', () => {
+    // One gateway at x=0, two targets far right at different heights (the
+    // screenshot that prompted midForkWeight)
+    const up = routeOrthogonal({ x: 0, y: 300 }, { x: 800, y: 0 }, [])
+    const down = routeOrthogonal({ x: 0, y: 300 }, { x: 800, y: 600 }, [])
+    for (const wps of [up, down]) {
+      expect(wps.length).toBeGreaterThan(0)
+      for (const p of wps) {
+        // Every bend sits in the middle half of the corridor
+        expect(p.x).toBeGreaterThan(200)
+        expect(p.x).toBeLessThan(600)
+      }
+    }
   })
 
   it('a box in the way is routed around, clearing its margin the whole way', () => {
