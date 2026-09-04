@@ -225,7 +225,11 @@
     "step3Desc": "Commands or diagram JSON both work — a ``` fence is fine",
     "answerPlaceholder": "Paste the AI's answer here…",
     "importAnswer": "Import answer",
-    "fold": "Fold panel"
+    "fold": "Fold panel",
+    "promptAll": "Full prompt (everything)",
+    "promptData": "Data modeling only (node / link)",
+    "promptArch": "Architecture only (icon / group)",
+    "promptWithExample": "Full prompt + example diagram"
   },
   "arrange": {
     "alignLeft": "Align left",

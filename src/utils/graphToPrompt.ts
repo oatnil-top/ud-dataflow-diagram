@@ -137,35 +137,105 @@ ${DATAFLOW_PROMPT_BODY}`
  * matters on context the model was not going to use. The material tells the model to ASK
  * when it needs the graph, and a real run confirmed it does.
  *
- * These 2346 bytes (~590 tokens, measured 2026-09-04; the icon whitelist is ~440 bytes
- * of that) are the delivered artifact, not a draft of one.
+ * The material ships in CHUNKS (master 2026-09-04, same conversation as the verbs):
+ * the copy button is a dropdown, so a user modeling plain data does not spend the icon
+ * whitelist's tokens, and one option appends a complete worked answer as a few-shot
+ * example. Every variant is COMPOSED from the pieces below — one source per sentence,
+ * so the variants cannot drift apart — and every variant is a complete standalone
+ * prompt (intro + its commands + its rules + a self-consistent example).
+ *
+ * Full prompt: 2346 bytes (~590 tokens, measured 2026-09-04; the icon whitelist is
+ * ~440 bytes of that). The delivered artifacts, not drafts.
  */
-export const DATAFLOW_COPY_PROMPT = `Turn my request into diagram edit commands — plain text, ONE command per line, nothing else. No JSON, no code fence, no explanations.
 
-Commands:
-node <id> <display name>: <field> <type>, <field> <type>, ...
-icon <id> <display name>: <icon-id>
-group <id> <display name> @<preset>: <memberId>, <memberId>, ...
-link <sourceId> -> <targetId>
+const PROMPT_INTRO = `Turn my request into diagram edit commands — plain text, ONE command per line, nothing else. No JSON, no code fence, no explanations.`
 
-Rules:
-- "node" is a data entity (table, API object). With a new id it CREATES; with an existing id it MODIFIES: the display name is replaced, listed fields are added or updated by name, existing fields are never removed.
-- ids are short ascii words; the display name may be in any language; the ": ..." part is optional.
-- <type> is one of string | number | boolean | uuid | object (optional, default string). Nested fields use dots: address.city string
-- "icon" is an architecture element (service, gateway, queue...). <icon-id> is lucide:<Name>, Name one of: User Users Building2 Contact Server Cpu Monitor Laptop Smartphone Tablet Terminal Container Database HardDrive Archive FolderOpen MemoryStick Globe Network Wifi Router Cable Cloud CloudCog CloudUpload CloudDownload Shield Lock Key ShieldCheck Fingerprint Mail MessageSquare Bell Send Webhook Blocks Workflow Plug GitBranch RefreshCcw Layers Boxes Cog Zap BarChart3 FileText Clock Sparkles
-- "group" draws a container around EXISTING members — write the members' own lines first. @<preset> is optional, one of cloud region network security cluster service danger subtle (a VPC is @network, a k8s/AKS cluster is @cluster).
-- "link" connects two ids (nodes, icons or groups) — ids from my current graph (I may paste it in this chat) or ids you created above. To connect two specific fields: link users.id -> orders.user_id
+const COMMANDS_DATA = `node <id> <display name>: <field> <type>, <field> <type>, ...`
+const COMMANDS_ARCH = `icon <id> <display name>: <icon-id>
+group <id> <display name> @<preset>: <memberId>, <memberId>, ...`
+const COMMANDS_LINK = `link <sourceId> -> <targetId>`
+
+const RULES_DATA = `- "node" is a data entity (table, API object). With a new id it CREATES; with an existing id it MODIFIES: the display name is replaced, listed fields are added or updated by name, existing fields are never removed.
+- <type> is one of string | number | boolean | uuid | object (optional, default string). Nested fields use dots: address.city string`
+const RULES_ARCH = `- "icon" is an architecture element (service, gateway, queue...). <icon-id> is lucide:<Name>, Name one of: User Users Building2 Contact Server Cpu Monitor Laptop Smartphone Tablet Terminal Container Database HardDrive Archive FolderOpen MemoryStick Globe Network Wifi Router Cable Cloud CloudCog CloudUpload CloudDownload Shield Lock Key ShieldCheck Fingerprint Mail MessageSquare Bell Send Webhook Blocks Workflow Plug GitBranch RefreshCcw Layers Boxes Cog Zap BarChart3 FileText Clock Sparkles
+- "group" draws a container around EXISTING members — write the members' own lines first. @<preset> is optional, one of cloud region network security cluster service danger subtle (a VPC is @network, a k8s/AKS cluster is @cluster).`
+const RULES_COMMON = `- ids are short ascii words; the display name may be in any language; the ": ..." part is optional.
+- "link" connects two ids — ids from my current graph (I may paste it in this chat) or ids you created above. To connect two specific fields: link users.id -> orders.user_id
 - Direction follows the reference: from the entity being referenced to the entity holding the reference.
 - NEVER write positions, sizes or coordinates — I arrange the canvas myself.
-- Never invent ids I did not give you, except ids for nodes you are creating. If my request refers to my existing diagram and I have not pasted my current graph, ask me for it in plain text first.
+- Never invent ids I did not give you, except ids for nodes you are creating. If my request refers to my existing diagram and I have not pasted my current graph, ask me for it in plain text first.`
 
-Example:
-node users 用户: id uuid, email string
+const EXAMPLE_DATA = `node users 用户: id uuid, email string
 node orders 订单: id uuid, user_id uuid, total number
-link users.id -> orders.user_id
-icon gw API Gateway: lucide:Globe
+link users.id -> orders.user_id`
+const EXAMPLE_ARCH = `icon gw API Gateway: lucide:Globe
 group vpc 生产 VPC @network: users, orders, gw
 link gw -> users`
+const EXAMPLE_ARCH_STANDALONE = `icon web Web App: lucide:Monitor
+icon api API 服务: lucide:Server
+icon db 数据库: lucide:Database
+group vpc 生产 VPC @network: api, db
+link web -> api
+link api -> db`
+
+const compose = (commands: string[], rules: string[], example: string[]) =>
+  `${PROMPT_INTRO}
+
+Commands:
+${commands.join('\n')}
+
+Rules:
+${rules.join('\n')}
+
+Example:
+${example.join('\n')}`
+
+/** Everything — the dropdown's "copy all" and the default. */
+export const DATAFLOW_COPY_PROMPT = compose(
+  [COMMANDS_DATA, COMMANDS_ARCH, COMMANDS_LINK],
+  [RULES_DATA, RULES_ARCH, RULES_COMMON],
+  [EXAMPLE_DATA, EXAMPLE_ARCH],
+)
+
+/** Data modeling only — no icon whitelist, near the original prompt's cost. */
+export const DATAFLOW_COPY_PROMPT_DATA = compose(
+  [COMMANDS_DATA, COMMANDS_LINK],
+  [RULES_DATA, RULES_COMMON],
+  [EXAMPLE_DATA],
+)
+
+/** Architecture only — icons and groups, with a self-consistent example. */
+export const DATAFLOW_COPY_PROMPT_ARCH = compose(
+  [COMMANDS_ARCH, COMMANDS_LINK],
+  [RULES_ARCH, RULES_COMMON],
+  [EXAMPLE_ARCH_STANDALONE],
+)
+
+/**
+ * A COMPLETE worked answer — data entities, icons, a group, links — for the few-shot
+ * option. Hand-written teaching material: ⛔ there is deliberately no graphToDsl
+ * serializer (dslParser.ts header), so this text is authored, and the parser test
+ * asserts it parses with zero bad lines.
+ */
+export const DATAFLOW_FULL_EXAMPLE = `# A complete answer for: "an online shop — users and orders in one VPC behind a gateway"
+node users 用户: id uuid, email string, address.city string
+node orders 订单: id uuid, user_id uuid, total number, status string
+node payments 支付: id uuid, order_id uuid, amount number
+link users.id -> orders.user_id
+link orders.id -> payments.order_id
+icon web Web App: lucide:Monitor
+icon gw API Gateway: lucide:Globe
+icon cache Cache: lucide:MemoryStick
+group vpc 生产 VPC @network: users, orders, payments, cache
+link web -> gw
+link gw -> vpc
+link orders -> cache`
+
+/** The full prompt plus the worked answer above — the dropdown's few-shot option. */
+export const DATAFLOW_COPY_PROMPT_WITH_EXAMPLE = `${DATAFLOW_COPY_PROMPT}
+
+Below is a complete example of a request and the answer I expect:
+${DATAFLOW_FULL_EXAMPLE}`
 
 export interface GraphForEditing {
   text: string

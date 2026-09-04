@@ -225,7 +225,11 @@
     "step3Desc": "命令或图 JSON 都可以,带 ``` 围栏也没关系",
     "answerPlaceholder": "把 AI 的回答原样粘到这里…",
     "importAnswer": "导入回答",
-    "fold": "收起面板"
+    "fold": "收起面板",
+    "promptAll": "完整提示词(全部)",
+    "promptData": "仅数据建模(node / link)",
+    "promptArch": "仅架构图元(icon / group)",
+    "promptWithExample": "完整提示词 + 示例图"
   },
   "arrange": {
     "alignLeft": "左对齐",

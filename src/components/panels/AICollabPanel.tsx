@@ -1,10 +1,16 @@
 import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Upload, MessageSquareText, ClipboardCopy, ClipboardPaste, Check, BotMessageSquare, PanelRightClose } from 'lucide-react'
+import { Upload, MessageSquareText, ClipboardCopy, ClipboardPaste, Check, BotMessageSquare, PanelRightClose, ChevronDown } from 'lucide-react'
 import { useNotify } from '../../host'
 import { useFlowStore } from '../../store/flowStoreContext'
 import { importPastedGraph, PASTE_FAILURE_KEYS } from '../../store/pasteImport'
-import { DATAFLOW_COPY_PROMPT, buildGraphForEditing } from '../../utils/graphToPrompt'
+import {
+  DATAFLOW_COPY_PROMPT,
+  DATAFLOW_COPY_PROMPT_DATA,
+  DATAFLOW_COPY_PROMPT_ARCH,
+  DATAFLOW_COPY_PROMPT_WITH_EXAMPLE,
+  buildGraphForEditing,
+} from '../../utils/graphToPrompt'
 import type { ViewportRect } from '../../store/editPlan'
 
 /**
@@ -34,6 +40,18 @@ import type { ViewportRect } from '../../store/editPlan'
 
 const DOCK_WIDTH = 360
 
+/**
+ * The prompt ships in chunks behind a dropdown (master, 2026-09-04): a user modeling
+ * plain data should not spend the icon whitelist's tokens, and the few-shot variant
+ * appends a complete worked answer. "Copy all" is first — it is the safe default.
+ */
+const PROMPT_VARIANTS = [
+  { key: 'promptAll', text: DATAFLOW_COPY_PROMPT },
+  { key: 'promptData', text: DATAFLOW_COPY_PROMPT_DATA },
+  { key: 'promptArch', text: DATAFLOW_COPY_PROMPT_ARCH },
+  { key: 'promptWithExample', text: DATAFLOW_COPY_PROMPT_WITH_EXAMPLE },
+] as const
+
 interface AICollabPanelProps {
   expanded: boolean
   onExpandedChange: (expanded: boolean) => void
@@ -60,12 +78,14 @@ export default function AICollabPanel({ expanded, onExpandedChange, getViewportC
   const [answerText, setAnswerText] = useState('')
   const [error, setError] = useState('')
   const [promptCopied, setPromptCopied] = useState(false)
+  const [promptMenuOpen, setPromptMenuOpen] = useState(false)
   const [graphCopied, setGraphCopied] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleCopyPrompt = async () => {
+  const handleCopyPrompt = async (text: string) => {
+    setPromptMenuOpen(false)
     try {
-      await navigator.clipboard.writeText(DATAFLOW_COPY_PROMPT)
+      await navigator.clipboard.writeText(text)
       setPromptCopied(true)
       setTimeout(() => setPromptCopied(false), 2000)
     } catch (e) {
@@ -199,16 +219,36 @@ export default function AICollabPanel({ expanded, onExpandedChange, getViewportC
               <p className="text-xs mt-0.5" style={stepDescStyle}>
                 {t('resources.dataflow.aiCollab.step1Desc')}
               </p>
-              <button
-                onClick={handleCopyPrompt}
-                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                style={promptCopied
-                  ? { color: '#15803d', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }
-                  : { color: '#334155', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
-              >
-                {promptCopied ? <Check size={14} /> : <MessageSquareText size={14} />}
-                {t(promptCopied ? 'resources.dataflow.aiCollab.copied' : 'resources.dataflow.aiCollab.copyPrompt')}
-              </button>
+              <div className="relative mt-2">
+                <button
+                  onClick={() => setPromptMenuOpen((open) => !open)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                  style={promptCopied
+                    ? { color: '#15803d', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }
+                    : { color: '#334155', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
+                >
+                  {promptCopied ? <Check size={14} /> : <MessageSquareText size={14} />}
+                  {t(promptCopied ? 'resources.dataflow.aiCollab.copied' : 'resources.dataflow.aiCollab.copyPrompt')}
+                  <ChevronDown size={12} />
+                </button>
+                {promptMenuOpen && (
+                  <div
+                    className="absolute left-0 top-full mt-1 z-20 rounded-lg overflow-hidden"
+                    style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)', minWidth: '220px' }}
+                  >
+                    {PROMPT_VARIANTS.map(({ key, text }) => (
+                      <button
+                        key={key}
+                        onClick={() => handleCopyPrompt(text)}
+                        className="block w-full text-left px-3 py-2 text-sm transition-colors hover:bg-slate-100"
+                        style={{ color: '#334155' }}
+                      >
+                        {t(`resources.dataflow.aiCollab.${key}`)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

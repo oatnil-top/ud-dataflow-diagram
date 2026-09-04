@@ -64,10 +64,32 @@ describe('the three steps read as one flow', () => {
     expect(document.body.textContent).not.toContain('{{');
   });
 
-  it('step 1 puts the teaching prompt itself on the clipboard', async () => {
+  it('step 1 is a dropdown: full prompt is the first option, and it lands on the clipboard', async () => {
     renderPanel();
     fireEvent.click(screen.getByRole('button', { name: /copy prompt/i }));
+    // The chunk menu (master 2026-09-04): copy-all first, then the cheaper parts
+    fireEvent.click(screen.getByRole('button', { name: /full prompt \(everything\)/i }));
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(DATAFLOW_COPY_PROMPT));
+  });
+
+  it('the data-only chunk skips the icon whitelist — cheaper tokens for plain data modeling', async () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /copy prompt/i }));
+    fireEvent.click(screen.getByRole('button', { name: /data modeling only/i }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain('node <id>');
+    expect(copied).not.toContain('lucide:');
+  });
+
+  it('the few-shot option carries a complete worked answer', async () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /copy prompt/i }));
+    fireEvent.click(screen.getByRole('button', { name: /example diagram/i }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain('complete example');
+    expect(copied).toContain('group vpc');
   });
 
   it('step 2 copies the current diagram, and says so when the canvas is empty instead of copying nothing', async () => {

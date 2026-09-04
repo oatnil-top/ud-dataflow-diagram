@@ -1,7 +1,14 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { graphToContext } from '../graphToContext'
-import { buildGraphForEditing, DATAFLOW_COPY_PROMPT } from '../graphToPrompt'
+import {
+  buildGraphForEditing,
+  DATAFLOW_COPY_PROMPT,
+  DATAFLOW_COPY_PROMPT_DATA,
+  DATAFLOW_COPY_PROMPT_ARCH,
+  DATAFLOW_FULL_EXAMPLE,
+} from '../graphToPrompt'
+import { parseDsl } from '../../store/dslParser'
 import type { AnyNode, Pipe } from '../../store/flowStore'
 import { createFlowStore } from '../../store/flowStore'
 
@@ -75,6 +82,23 @@ describe('the copy prompt and the graph are two separate clipboards now', () => 
     // spellings, not the English word.
     expect(DATAFLOW_COPY_PROMPT).not.toMatch(/"position"|parentId|sourceHandle|"nodes"/)
     expect(DATAFLOW_COPY_PROMPT).toContain('NEVER write positions')
+  })
+
+  it('every prompt chunk is standalone and says only its own verbs; the worked example parses clean', () => {
+    // Data-only: no icon whitelist, no group syntax — the cheap chunk stays cheap
+    expect(DATAFLOW_COPY_PROMPT_DATA).toContain('node <id>')
+    expect(DATAFLOW_COPY_PROMPT_DATA).not.toContain('lucide:')
+    expect(DATAFLOW_COPY_PROMPT_DATA).not.toContain('group <id>')
+    // Arch-only: its example must be self-consistent (its group wraps its own icons)
+    expect(DATAFLOW_COPY_PROMPT_ARCH).toContain('icon <id>')
+    const archPlan = parseDsl(DATAFLOW_COPY_PROMPT_ARCH.split('Example:\n')[1])
+    expect(archPlan.badLines).toEqual([])
+    // The few-shot worked answer is hand-written (no graphToDsl, on purpose) — so a
+    // test, not a serializer, is what keeps it honest against the parser
+    const examplePlan = parseDsl(DATAFLOW_FULL_EXAMPLE)
+    expect(examplePlan.badLines).toEqual([])
+    expect(examplePlan.ops.some((o) => o.kind === 'group')).toBe(true)
+    expect(examplePlan.ops.some((o) => o.kind === 'icon')).toBe(true)
   })
 
   it('it is the delivered ~2.3KB artifact, not a draft — free chat boxes have a ceiling', () => {
