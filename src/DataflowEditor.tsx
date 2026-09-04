@@ -1,6 +1,6 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, Save, Download, FileDown, MessageSquareText, BotMessageSquare, ClipboardCopy, Image } from 'lucide-react';
+import { X, Loader2, Save, Download, FileDown, Image } from 'lucide-react';
 import { Button } from './ui/button';
 import {
   AlertDialog,
@@ -14,9 +14,7 @@ import {
 } from './ui/alert-dialog';
 import DataflowCanvas, { type DataflowCanvasRef } from './DataflowCanvas';
 import { embedJsonInPng, captureCanvasToBlob } from './utils/pngEncoder';
-import { DATAFLOW_COPY_PROMPT, buildGraphForEditing } from './utils/graphToPrompt';
 import { graphToDrawioXml, downloadDrawioFile } from './utils/graphToDrawio';
-import { graphToText } from './utils/graphToText';
 import './index.css';
 import type { FlowStore } from './store/flowStore';
 import type { DiagramContextValue } from './diagramContext';
@@ -211,48 +209,10 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
     notify('info', t('resources.dataflow.editor.drawioExported'));
   }, [t, notify]);
 
-  // The teaching material alone, no diagram attached — see utils/graphToPrompt.ts for why
-  // the two were split. Same behaviour as the playground toolbar; both read the same const.
-  const handleCopyPrompt = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(DATAFLOW_COPY_PROMPT);
-      notify('info', t('resources.dataflow.promptCopied'));
-    } catch (error) {
-      notify('error', t('common.status.error'), error);
-    }
-  }, [t, notify]);
-
-  // The companion button: the current diagram, for the requests that need its ids
-  // ("connect products to orders"). Separate because most requests do not.
-  const handleCopyGraphForEditing = useCallback(async () => {
-    if (!flowStoreRef.current) return;
-    const state = flowStoreRef.current.getState();
-    const graph = buildGraphForEditing(state.nodes, state.pipes);
-    if (graph.nodeCount === 0) {
-      notify('info', t('resources.dataflow.graphForEditingEmpty'));
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(graph.text);
-      notify('info', t(graph.degraded
-        ? 'resources.dataflow.paste.graphForEditingTrimmed'
-        : 'resources.dataflow.paste.graphForEditingCopied', { n: graph.nodeCount }));
-    } catch (error) {
-      notify('error', t('common.status.error'), error);
-    }
-  }, [t, notify]);
-
-  const handleCopyForAI = useCallback(async () => {
-    if (!flowStoreRef.current) return;
-    const state = flowStoreRef.current.getState();
-    const text = graphToText(state.nodes, state.pipes);
-    try {
-      await navigator.clipboard.writeText(text);
-      notify('info', t('resources.dataflow.copiedForAI'));
-    } catch (error) {
-      notify('error', t('common.status.error'), error);
-    }
-  }, [t, notify]);
+  // The AI round-trip copy actions that used to sit here as three unlabeled icons
+  // (copy prompt / copy current diagram / copy for AI) live in the AI Collaborate
+  // panel now — one named entry on the canvas menu, where the paste-back step sits
+  // beside them (task 5b0bfd1e A). The header keeps only save/close and file exports.
 
   const busy = saving || exporting;
 
@@ -276,15 +236,6 @@ export default function DataflowEditor({ initialContent, diagram, onSaveGraph, o
               {t('resources.dataflow.editor.exporting')}
             </span>
           )}
-          <Button variant="ghost" size="sm" onClick={handleCopyPrompt} disabled={busy} title={t('resources.dataflow.copyPrompt')}>
-            <MessageSquareText className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyGraphForEditing} disabled={busy} title={t('resources.dataflow.copyGraphForEditing')}>
-            <ClipboardCopy className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyForAI} disabled={busy} title={t('resources.dataflow.copyForAI')}>
-            <BotMessageSquare className="h-4 w-4" />
-          </Button>
           <Button variant="ghost" size="sm" onClick={handleExportPng} disabled={busy} title={t('resources.dataflow.editor.exportPng')}>
             <Image className="h-4 w-4" />
           </Button>

@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
-import { Trash2, BotMessageSquare } from 'lucide-react'
+import { Trash2, BotMessageSquare, AlignStartVertical, AlignEndVertical, StretchHorizontal, StretchVertical } from 'lucide-react'
 import { graphToText } from './utils/graphToText'
 import { useDataflowHost, useNotify } from './host'
 import { useTranslation } from 'react-i18next'
@@ -26,7 +26,7 @@ import ContextMenu from './components/ContextMenu'
 import CanvasMenu from './components/CanvasMenu'
 import JsonImportPanel from './components/panels/JsonImportPanel'
 import JsonlImportPanel from './components/panels/JsonlImportPanel'
-import GraphImportPanel from './components/panels/GraphImportPanel'
+import AICollabPanel from './components/panels/AICollabPanel'
 import ImportSummaryBar from './components/panels/ImportSummaryBar'
 import AIGeneratePanel from './components/panels/AIGeneratePanel'
 import ProcessEditorPanel from './components/panels/ProcessEditorPanel'
@@ -77,6 +77,7 @@ function Flow({ store, embedMode }: FlowProps) {
   const canUndo = store((state) => state.canUndo)
   const canRedo = store((state) => state.canRedo)
   const takeSnapshot = store((state) => state.takeSnapshot)
+  const arrangeSelection = store((state) => state.arrangeSelection)
 
   // Collapsed note/resource nodes render without their persisted size —
   // see stripSizeWhenCollapsed for why the store keeps it and the render drops it
@@ -167,6 +168,15 @@ function Flow({ store, embedMode }: FlowProps) {
     notify('info', t('resources.dataflow.copiedForAI'))
   }, [selectedNodes, pipes, t, notify])
 
+  // The four arrangement buttons act on the SELECTION (store.arrangeSelection); a paste
+  // leaves its batch selected on both channels, so they work on what just landed. When
+  // part of the selection lives in another coordinate space it is skipped — and the user
+  // is told, never silently (task 5b0bfd1e).
+  const handleArrangeSelection = useCallback((op: Parameters<typeof arrangeSelection>[0]) => {
+    const { skipped } = arrangeSelection(op)
+    if (skipped > 0) notify('info', t('resources.dataflow.arrange.skipped', { skipped }))
+  }, [arrangeSelection, notify, t])
+
   // Compute highlighted pipes - a pipe is highlighted if both endpoints are in the color map
   // Pipes with existing styles (note/image dashed lines) preserve their style unless highlighted
   const styledEdges = useMemo(() => {
@@ -236,7 +246,7 @@ function Flow({ store, embedMode }: FlowProps) {
 
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonlImportOpen, setJsonlImportOpen] = useState(false)
-  const [graphImportOpen, setGraphImportOpen] = useState(false)
+  const [aiCollabOpen, setAiCollabOpen] = useState(false)
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false)
   const [processEditorOpen, setProcessEditorOpen] = useState(false)
   const [newNodePosition, setNewNodePosition] = useState({ x: 100, y: 100 })
@@ -353,9 +363,9 @@ function Flow({ store, embedMode }: FlowProps) {
     }
   }, [contextMenu])
 
-  // Import graph JSON - opens the panel
-  const handleImportGraph = useCallback(() => {
-    setGraphImportOpen(true)
+  // AI Collaborate — the external-chat round trip panel (copy prompt / paste answer)
+  const handleOpenAICollab = useCallback(() => {
+    setAiCollabOpen(true)
   }, [])
 
   // AI generate - opens the panel.
@@ -577,16 +587,50 @@ function Flow({ store, embedMode }: FlowProps) {
         {!embedMode && (
           <Toolbar
             onOpenJsonImport={handleOpenJsonImport}
+            onOpenAICollab={handleOpenAICollab}
             onAIGenerate={onAIGenerate}
             embedMode={embedMode}
             getViewportCenter={getViewportCenter}
-            getViewportRect={getViewportRect}
           />
         )}
 
         {/* Selection action buttons */}
         {selectionCount > 1 && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+            {/* Arrangement needs 2+ NODES — selectionCount also counts edges */}
+            {selectedNodes.length > 1 && (
+              <div className="flex items-center bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden">
+                <button
+                  onClick={() => handleArrangeSelection('align-left')}
+                  className="p-2.5 hover:bg-slate-100 text-slate-600 transition-colors"
+                  title={t('resources.dataflow.arrange.alignLeft')}
+                >
+                  <AlignStartVertical size={14} />
+                </button>
+                <button
+                  onClick={() => handleArrangeSelection('align-right')}
+                  className="p-2.5 hover:bg-slate-100 text-slate-600 transition-colors"
+                  title={t('resources.dataflow.arrange.alignRight')}
+                >
+                  <AlignEndVertical size={14} />
+                </button>
+                <div className="w-px h-5" style={{ backgroundColor: '#e2e8f0' }} />
+                <button
+                  onClick={() => handleArrangeSelection('row')}
+                  className="p-2.5 hover:bg-slate-100 text-slate-600 transition-colors"
+                  title={t('resources.dataflow.arrange.row')}
+                >
+                  <StretchHorizontal size={14} />
+                </button>
+                <button
+                  onClick={() => handleArrangeSelection('column')}
+                  className="p-2.5 hover:bg-slate-100 text-slate-600 transition-colors"
+                  title={t('resources.dataflow.arrange.column')}
+                >
+                  <StretchVertical size={14} />
+                </button>
+              </div>
+            )}
             <button
               onClick={handleExportSelection}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-lg transition-colors text-sm font-medium"
@@ -638,7 +682,7 @@ function Flow({ store, embedMode }: FlowProps) {
             onShowElements={() => setIconSidebarOpen(true)}
             onImportJson={handleImportJsonFromMenu}
             onImportJsonl={handleImportJsonlFromMenu}
-            onImportGraph={handleImportGraph}
+            onOpenAICollab={handleOpenAICollab}
             onAIGenerate={onAIGenerate}
           />
         )}
@@ -664,7 +708,7 @@ function Flow({ store, embedMode }: FlowProps) {
             onCreateShape={handleCanvasCreateShape}
             onImportJson={handleCanvasImportJson}
             onImportJsonl={handleCanvasImportJsonl}
-            onImportGraph={handleImportGraph}
+            onOpenAICollab={handleOpenAICollab}
             onAIGenerate={onAIGenerate}
             canUndo={canUndo}
             canRedo={canRedo}
@@ -673,9 +717,9 @@ function Flow({ store, embedMode }: FlowProps) {
           />
         )}
 
-        <GraphImportPanel
-          isOpen={graphImportOpen}
-          onClose={() => setGraphImportOpen(false)}
+        <AICollabPanel
+          isOpen={aiCollabOpen}
+          onClose={() => setAiCollabOpen(false)}
           getViewportCenter={getViewportCenter}
           getViewportRect={getViewportRect}
         />

@@ -15,6 +15,7 @@ import { applySetOperation, SET_OP_SYMBOLS, type SetOperation } from '../utils/f
 import { sortNodesParentsFirst } from '../utils/nodeOrder'
 import { ensureNodeFieldIds, parseImportedGraph } from './importFormats'
 import { applyEditPlan as buildEditApplication, type ViewportRect } from './editPlan'
+import { arrangeNodes, type ArrangeOp } from '../utils/arrangeNodes'
 import type { EditPlan, BadLine } from './dslParser'
 
 // React Flow uses "Edge", we call them "Pipe" in our domain
@@ -152,10 +153,20 @@ export interface FlowState {
   clearGraph: () => void
 
   /**
+   * Arrange the CURRENTLY SELECTED nodes (utils/arrangeNodes.ts) in one undo step.
+   * Selection is the whole contract: both paste channels leave their new batch
+   * selected, so "paste an AI answer → press a button" arranges exactly that batch
+   * and nothing else. Returns how many nodes moved and how many selected nodes were
+   * left out for living in another coordinate space — the caller owes the user a
+   * word when `skipped > 0`.
+   */
+  arrangeSelection: (op: ArrangeOp) => { moved: number; skipped: number }
+
+  /**
    * The last paste-path import, for the summary bar to render and dismiss.
    *
    * Store state rather than a return value the entry points thread into a component,
-   * because three entry points (GraphImportPanel, Toolbar, canvas Ctrl+V) produce it and
+   * because three entry points (AICollabPanel, the playground toolbar, canvas Ctrl+V) produce it and
    * one bar renders it. Set only by callers that actually paste — loading the built-in
    * example and the in-app AI panel keep their own toasts and leave this alone.
    */
@@ -1054,8 +1065,20 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
         resetHistory()
       } else if (parsed.nodes.length > 0 || parsed.pipes.length > 0) {
         pushSnapshot()
+        // A merge-import IS a paste: the new batch arrives selected and everything
+        // else is deselected, exactly as the DSL channel does (editPlan.ts), so the
+        // selection bar's arrange buttons work on what just landed regardless of
+        // which format the model answered in. Selection is transient UI state —
+        // exportGraph strips it — so this never reaches a saved document. When only
+        // pipes landed there is no batch to select and the selection is left alone.
+        const incoming = parsed.nodes.length > 0
+          ? parsed.nodes.map((n) => ({ ...n, selected: true }))
+          : parsed.nodes
+        const current = parsed.nodes.length > 0
+          ? get().nodes.map((n) => (n.selected ? ({ ...n, selected: false } as AnyNode) : n))
+          : get().nodes
         set({
-          nodes: [...get().nodes, ...parsed.nodes],
+          nodes: [...current, ...incoming],
           pipes: [...get().pipes, ...parsed.pipes],
         })
       }
@@ -1099,6 +1122,24 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
     clearGraph: () => {
       pushSnapshot()
       set({ nodes: [], pipes: [] })
+    },
+
+    arrangeSelection: (op) => {
+      const result = arrangeNodes(op, get().nodes.filter((n) => n.selected))
+      if (result.movedIds.length === 0) {
+        // Nothing would move — no snapshot, or undo grows a step that restores nothing.
+        return { moved: 0, skipped: result.skippedIds.length }
+      }
+      pushSnapshot()
+      set({
+        nodes: get().nodes.map((n) => {
+          const next = result.positions.get(n.id)
+          return next && (next.x !== n.position.x || next.y !== n.position.y)
+            ? { ...n, position: next }
+            : n
+        }),
+      })
+      return { moved: result.movedIds.length, skipped: result.skippedIds.length }
     },
   }})
 }

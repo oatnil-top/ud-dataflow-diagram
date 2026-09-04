@@ -7,9 +7,6 @@
   "saveSuccess": "Data flow saved successfully",
   "saveFailed": "Failed to save data flow",
   "createNew": "Create New Data Flow",
-  "copyPrompt": "Copy as Prompt",
-  "promptCopied": "Prompt copied to clipboard",
-  "copyForAI": "Copy for AI",
   "copiedForAI": "Diagram copied as text for AI",
   "copyGraphForEditing": "Copy Current Diagram",
   "graphForEditingEmpty": "The diagram is empty — nothing to copy",
@@ -34,17 +31,15 @@
     "elementsPanel": "Elements Panel",
     "importJson": "Import JSON",
     "importJsonl": "Import JSONL",
-    "importGraph": "Import Graph JSON",
-    "aiGenerate": "AI Generate",
+    "aiGenerate": "AI Generate · in-app",
     "undo": "Undo (Ctrl+Z)",
-    "redo": "Redo (Ctrl+Shift+Z)"
+    "redo": "Redo (Ctrl+Shift+Z)",
+    "aiCollab": "AI Collaborate · external chat"
   },
   "toolbar": {
     "importJson": "Import JSON",
-    "aiGenerate": "AI Generate",
+    "aiGenerate": "AI Generate · in-app",
     "export": "Export",
-    "import": "Import",
-    "importGraph": "Import Graph",
     "example": "Example",
     "loadExample": "Load Example",
     "clearGraph": "Clear Graph",
@@ -55,8 +50,7 @@
     "importFailed": "Import failed — invalid graph JSON",
     "graphCleared": "Graph cleared — press Ctrl+Z to undo",
     "exampleLoaded": "Example graph loaded — press Ctrl+Z to undo",
-    "pastePlaceholder": "Paste graph JSON here...",
-    "fromFile": "From File"
+    "aiCollab": "AI Collaborate"
   },
   "elements": {
     "title": "Elements",
@@ -144,15 +138,11 @@
     "aiInputPlaceholder": "Describe your data structure, e.g.:\n\nCREATE TABLE users (id INT, name VARCHAR, email VARCHAR);\nCREATE TABLE orders (id INT, user_id INT REFERENCES users(id), total DECIMAL);\n\nOr plain text:\n\"Users have id, name, email. Orders reference users by user_id.\"",
     "generating": "Generating...",
     "generate": "Generate",
-    "importGraphTitle": "Import Graph JSON",
-    "importGraphSubtitle": "Imported nodes will be added to the current diagram",
-    "graphJsonLabel": "Graph JSON",
     "uploadFile": "Upload file",
-    "graphJsonPlaceholder": "Paste the graph JSON here or click \"Upload file\" to select a .json file",
     "enterOrUpload": "Please enter or upload graph JSON",
     "invalidJson": "Invalid JSON",
     "importNotRecognized": "Failed to import: the JSON format was not recognized. Please check that it contains a valid \"nodes\" array.",
-    "legacyFormatRejected": "This JSON uses a retired format ({name, fields} nodes or a top-level \"groups\" key), which is no longer supported. Re-copy the AI prompt (toolbar → Copy as Prompt) and have your AI regenerate the diagram, or use AI Generate in the app.",
+    "legacyFormatRejected": "This JSON uses a retired format ({name, fields} nodes or a top-level \"groups\" key), which is no longer supported. Re-copy the prompt (AI Collaborate → step 1) and have your AI regenerate the diagram, or use the in-app AI Generate.",
     "readFileFailed": "Failed to read file",
     "import": "Import",
     "importAll": "Import All",
@@ -199,7 +189,7 @@
     "undo": "Undo",
     "dismiss": "Dismiss",
     "truncated": "That output is incomplete — it looks like it was cut off. Go back to the chat and ask it to output the complete JSON again, or continue the answer and paste both parts together.",
-    "noJson": "No diagram JSON found in what you pasted. Copy the prompt again (Export → Copy as Prompt), run it in your AI chat, and paste the answer back.",
+    "noJson": "No diagram JSON or edit commands found in what you pasted. Copy the prompt again (AI Collaborate → step 1), run it in your AI chat, and paste the answer back.",
     "malformed": "Found something that looks like JSON, but it could not be read. Ask the chat to output the JSON again on its own, with nothing before or after it.",
     "notAGraph": "That JSON is valid but contains nothing to import. It needs a \"nodes\" array — or, to only add connections between nodes already on the canvas, a \"pipes\" array.",
     "updatedNodes": "{{n}} nodes modified",
@@ -220,5 +210,26 @@
   "detail": {
     "openEditor": "Open Editor",
     "loadFailed": "Could not load this diagram"
+  },
+  "aiCollab": {
+    "title": "AI Collaborate",
+    "subtitle": "Copy the prompt into any AI chat, then paste its answer back — no in-app model setup needed",
+    "step1Title": "Step 1 · Copy the prompt",
+    "step1Desc": "Send it to any AI chat — it teaches the model to answer in diagram commands",
+    "copyPrompt": "Copy prompt",
+    "copied": "Copied",
+    "step2Title": "Step 2 (optional) · Copy the current diagram",
+    "step2Desc": "Include it when changing an existing diagram, so the AI knows the node ids",
+    "step3Title": "Step 3 · Paste the AI's answer",
+    "step3Desc": "Commands or diagram JSON both work — a ``` fence is fine",
+    "answerPlaceholder": "Paste the AI's answer here…",
+    "importAnswer": "Import answer"
+  },
+  "arrange": {
+    "alignLeft": "Align left",
+    "alignRight": "Align right",
+    "row": "Arrange in a row",
+    "column": "Arrange in a column",
+    "skipped": "{{skipped}} selected node(s) are inside another group and were left out"
   }
 }

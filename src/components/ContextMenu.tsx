@@ -1,4 +1,4 @@
-import { Plus, FileJson, FileStack, Upload, Sparkles, StickyNote, Group, FileIcon, Layers, Hexagon } from 'lucide-react'
+import { Plus, FileJson, FileStack, BotMessageSquare, Sparkles, StickyNote, Group, FileIcon, Layers, Hexagon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface ContextMenuProps {
@@ -13,11 +13,11 @@ interface ContextMenuProps {
   onShowElements: () => void
   onImportJson: () => void
   onImportJsonl: () => void
-  onImportGraph?: () => void
+  onOpenAICollab?: () => void
   onAIGenerate?: () => void
 }
 
-export default function ContextMenu({ x, y, onClose, onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onShowElements, onImportJson, onImportJsonl, onImportGraph, onAIGenerate }: ContextMenuProps) {
+export default function ContextMenu({ x, y, onClose, onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onShowElements, onImportJson, onImportJsonl, onOpenAICollab, onAIGenerate }: ContextMenuProps) {
   const { t } = useTranslation()
   return (
     <>
@@ -131,19 +131,19 @@ export default function ContextMenu({ x, y, onClose, onCreateNode, onCreateNote,
           <FileStack size={14} style={{ color: '#64748b' }} />
           {t('resources.dataflow.menu.importJsonl')}
         </button>
-        {onImportGraph && (
+        {onOpenAICollab && (
           <>
             <div className="my-1" style={{ borderTop: '1px solid #e2e8f0' }} />
             <button
               onClick={() => {
-                onImportGraph()
+                onOpenAICollab()
                 onClose()
               }}
               className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 transition-colors hover:bg-slate-100"
               style={{ color: '#1e293b' }}
             >
-              <Upload size={14} style={{ color: '#64748b' }} />
-              {t('resources.dataflow.menu.importGraph')}
+              <BotMessageSquare size={14} style={{ color: '#7c3aed' }} />
+              {t('resources.dataflow.menu.aiCollab')}
             </button>
           </>
         )}

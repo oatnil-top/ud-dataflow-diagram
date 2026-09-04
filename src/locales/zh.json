@@ -7,9 +7,6 @@
   "saveSuccess": "数据流保存成功",
   "saveFailed": "保存数据流失败",
   "createNew": "新建数据流",
-  "copyPrompt": "复制为提示词",
-  "promptCopied": "提示词已复制到剪贴板",
-  "copyForAI": "复制给 AI",
   "copiedForAI": "图表已复制为 AI 文本格式",
   "copyGraphForEditing": "复制当前图",
   "graphForEditingEmpty": "画布是空的 —— 没有可复制的内容",
@@ -34,17 +31,15 @@
     "elementsPanel": "元素面板",
     "importJson": "导入 JSON",
     "importJsonl": "导入 JSONL",
-    "importGraph": "导入图 JSON",
-    "aiGenerate": "AI 生成",
+    "aiGenerate": "AI 生成 · 应用内",
     "undo": "撤销 (Ctrl+Z)",
-    "redo": "重做 (Ctrl+Shift+Z)"
+    "redo": "重做 (Ctrl+Shift+Z)",
+    "aiCollab": "AI 协作 · 外部聊天"
   },
   "toolbar": {
     "importJson": "导入 JSON",
-    "aiGenerate": "AI 生成",
+    "aiGenerate": "AI 生成 · 应用内",
     "export": "导出",
-    "import": "导入",
-    "importGraph": "导入图",
     "example": "示例",
     "loadExample": "加载示例",
     "clearGraph": "清空图",
@@ -55,8 +50,7 @@
     "importFailed": "导入失败 —— 无效的图 JSON",
     "graphCleared": "图已清空 —— 按 Ctrl+Z 撤销",
     "exampleLoaded": "示例图已加载 —— 按 Ctrl+Z 撤销",
-    "pastePlaceholder": "在此粘贴图 JSON...",
-    "fromFile": "从文件导入"
+    "aiCollab": "AI 协作"
   },
   "elements": {
     "title": "元素",
@@ -144,15 +138,11 @@
     "aiInputPlaceholder": "描述你的数据结构，例如：\n\nCREATE TABLE users (id INT, name VARCHAR, email VARCHAR);\nCREATE TABLE orders (id INT, user_id INT REFERENCES users(id), total DECIMAL);\n\n或用纯文本：\n\"用户有 id、name、email。订单通过 user_id 关联用户。\"",
     "generating": "生成中...",
     "generate": "生成",
-    "importGraphTitle": "导入图 JSON",
-    "importGraphSubtitle": "导入的节点将被添加到当前图表",
-    "graphJsonLabel": "图 JSON",
     "uploadFile": "上传文件",
-    "graphJsonPlaceholder": "在此粘贴图 JSON，或点击“上传文件”选择 .json 文件",
     "enterOrUpload": "请输入或上传图 JSON",
     "invalidJson": "无效的 JSON",
     "importNotRecognized": "导入失败：无法识别 JSON 格式。请检查它是否包含有效的 \"nodes\" 数组。",
-    "legacyFormatRejected": "该 JSON 是已停用的旧格式（{name, fields} 节点或顶层 \"groups\" 键），不再支持导入。请重新复制 AI 提示词（工具栏 → 复制为提示词）让 AI 重新生成，或使用应用内 AI 生成。",
+    "legacyFormatRejected": "该 JSON 是已停用的旧格式（{name, fields} 节点或顶层 \"groups\" 键），不再支持导入。请重新复制提示词（AI 协作 → 第 1 步）让 AI 重新生成，或使用应用内 AI 生成。",
     "readFileFailed": "读取文件失败",
     "import": "导入",
     "importAll": "全部导入",
@@ -199,7 +189,7 @@
     "undo": "撤销",
     "dismiss": "关闭",
     "truncated": "这份输出不完整,像是被截断了。回到聊天里让它「重新只输出完整的 JSON」,或点继续后把两段拼起来再粘贴。",
-    "noJson": "粘贴的内容里没有找到图 JSON。请重新复制提示词(导出 → 复制提示词),在 AI 聊天里跑一遍,再把回答粘回来。",
+    "noJson": "粘贴的内容里没有找到图 JSON 或画图命令。请重新复制提示词(AI 协作 → 第 1 步),在 AI 聊天里跑一遍,再把回答粘回来。",
     "malformed": "找到了像 JSON 的内容,但读不出来。让聊天重新单独输出一次 JSON,前后不要带别的文字。",
     "notAGraph": "这份 JSON 是合法的,但里面没有可导入的内容。它需要一个 \"nodes\" 数组 —— 若只想给画布上已有的节点加连线,则需要一个 \"pipes\" 数组。",
     "updatedNodes": "修改 {{n}} 个节点",
@@ -220,5 +210,26 @@
   "detail": {
     "openEditor": "打开编辑器",
     "loadFailed": "无法加载该图"
+  },
+  "aiCollab": {
+    "title": "AI 协作",
+    "subtitle": "复制提示词给任意 AI 聊天,再把它的回答粘回来 —— 无需在应用内配置模型",
+    "step1Title": "第 1 步 · 复制提示词",
+    "step1Desc": "发到任意 AI 聊天里,它会学会输出画图命令",
+    "copyPrompt": "复制提示词",
+    "copied": "已复制",
+    "step2Title": "第 2 步(可选)· 复制当前图",
+    "step2Desc": "要改现有图时一并发给 AI,它才知道节点的 id",
+    "step3Title": "第 3 步 · 粘贴 AI 的回答",
+    "step3Desc": "命令或图 JSON 都可以,带 ``` 围栏也没关系",
+    "answerPlaceholder": "把 AI 的回答原样粘到这里…",
+    "importAnswer": "导入回答"
+  },
+  "arrange": {
+    "alignLeft": "左对齐",
+    "alignRight": "右对齐",
+    "row": "横向排布",
+    "column": "纵向排布",
+    "skipped": "{{skipped}} 个选中节点在其他分组内,未参与排布"
   }
 }

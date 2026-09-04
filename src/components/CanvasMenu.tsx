@@ -1,4 +1,4 @@
-import { Plus, FileJson, FileStack, Upload, Sparkles, StickyNote, Group, FileIcon, Hexagon, Undo2, Redo2 } from 'lucide-react'
+import { Plus, FileJson, FileStack, BotMessageSquare, Sparkles, StickyNote, Group, FileIcon, Hexagon, Undo2, Redo2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 interface CanvasMenuProps {
@@ -9,7 +9,7 @@ interface CanvasMenuProps {
   onCreateShape: () => void
   onImportJson: () => void
   onImportJsonl: () => void
-  onImportGraph: () => void
+  onOpenAICollab: () => void
   onAIGenerate?: () => void
   canUndo?: boolean
   canRedo?: boolean
@@ -17,7 +17,7 @@ interface CanvasMenuProps {
   onRedo?: () => void
 }
 
-export default function CanvasMenu({ onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onImportJson, onImportJsonl, onImportGraph, onAIGenerate, canUndo, canRedo, onUndo, onRedo }: CanvasMenuProps) {
+export default function CanvasMenu({ onCreateNode, onCreateNote, onCreateResource, onCreateGroup, onCreateShape, onImportJson, onImportJsonl, onOpenAICollab, onAIGenerate, canUndo, canRedo, onUndo, onRedo }: CanvasMenuProps) {
   const { t } = useTranslation()
   return (
     <div
@@ -82,12 +82,12 @@ export default function CanvasMenu({ onCreateNode, onCreateNote, onCreateResourc
       </button>
       <div className="w-px h-5 mx-0.5" style={{ backgroundColor: '#e2e8f0' }} />
       <button
-        onClick={onImportGraph}
-        className="p-2 rounded transition-colors hover:bg-slate-100"
-        style={{ color: '#64748b' }}
-        title={t('resources.dataflow.menu.importGraph')}
+        onClick={onOpenAICollab}
+        className="p-2 rounded transition-colors hover:bg-violet-100"
+        style={{ color: '#7c3aed' }}
+        title={t('resources.dataflow.menu.aiCollab')}
       >
-        <Upload size={16} />
+        <BotMessageSquare size={16} />
       </button>
       {onAIGenerate && (
         <>
