@@ -100,6 +100,44 @@ describe.each([false, true])('copy keeps the size (group collapsed: %s)', (colla
   })
 })
 
+/**
+ * The assertions above compare a copy against its source. That shape is vacuously true if
+ * `renderedSize` ever collapsed into "whatever the copy happens to be" — so the suite also
+ * has to show it can tell the two sizes apart. The owner named this control directly:
+ * a group that was NEVER resized must copy as the creation default, not as something the
+ * test derived from the copy itself.
+ */
+describe('the assertion is not true by construction', () => {
+  it('a never-resized group copies as 400x300 — the creation default, stated outright', () => {
+    const store = createFlowStore()
+    const gid = store.getState().addGroupNode('untouched', { x: 0, y: 0 })
+    const copyId = store.getState().duplicateNode(gid)
+    const copy = store.getState().nodes.find((n) => n.id === copyId)!
+    expect(renderedSize(copy)).toEqual({ w: 400, h: 300 })
+    expect(copy.width).toBeUndefined()   // nothing to carry, so nothing was invented
+  })
+
+  it('and a resized one copies as 780x540 — the two cases really do read differently', () => {
+    const { store, gid } = seed(false)
+    const copyId = store.getState().duplicateNode(gid)
+    const copy = store.getState().nodes.find((n) => n.id === copyId)!
+    expect(renderedSize(copy)).toEqual({ w: 780, h: 540 })
+    expect(copy.style).toMatchObject({ width: 400, height: 300 })  // style is still the birth size
+  })
+
+  it('the loss was never groups-only: a resized json node and note lose it too', () => {
+    // Measured on the card with the fix neutered: json 460x220 -> 320x100 and
+    // note 610x300 -> 240x70, alongside the group's 780x540 -> 400x300. A json node
+    // carries no `style` at all, so its copy fell all the way back to the type estimate.
+    const { store, resizedChild } = seed(false)
+    const src = store.getState().nodes.find((n) => n.id === resizedChild)!
+    const copyId = store.getState().duplicateNode(resizedChild)
+    const copy = store.getState().nodes.find((n) => n.id === copyId)!
+    expect(src.style).toBeUndefined()
+    expect(renderedSize(copy)).toEqual({ w: 460, h: 220 })
+  })
+})
+
 describe('what a copy must NOT carry', () => {
   it('drops `measured` — for a folded group that is the chip, not the frame', () => {
     // The render boundary strips a collapsed group's size so React Flow measures the
