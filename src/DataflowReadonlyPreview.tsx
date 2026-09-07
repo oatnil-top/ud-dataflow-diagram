@@ -193,11 +193,18 @@ function useFitOnceMeasured(hasNodes: boolean): void {
   useEffect(() => {
     if (!hasNodes || !allMeasured || didFit.current) return
     didFit.current = true
-    // The editor's landing, to the option (DataflowCanvas.tsx): the same diagram is read on
-    // both surfaces and they must frame it the same way. `maxZoom: 1` is the half that has
-    // to be written out — the <ReactFlow fitView> prop honours the canvas maxZoom of 4, so
-    // a diagram smaller than the pane would open blown up.
-    void fitView({ padding: 0.15, maxZoom: 1 })
+    // ⚠️ `padding: 0.1` is React Flow's own default — deliberately NOT the editor's 0.15.
+    // This fix is about WHEN the fit runs, not how it frames, so a diagram that was already
+    // landing correctly here must land on the same pixels afterwards: measured on devbox,
+    // the old group-less diagram ea54c216 reads zoom 0.763 before and after. Borrowing the
+    // editor's 0.15 moved it to 0.729 — harmless, but a change to a surface this card did
+    // not come to change. (The two never match anyway: the viewer's pane is smaller than
+    // the editor's, so equal padding still gives different zoom.)
+    //
+    // `maxZoom: 1` is the one option that must be written out. The <ReactFlow fitView> prop
+    // honours the canvas maxZoom of 4, so a diagram smaller than the pane would open blown
+    // up — the same call the editor makes, and for the same reason.
+    void fitView({ padding: 0.1, maxZoom: 1 })
   }, [hasNodes, allMeasured, fitView])
 }
 

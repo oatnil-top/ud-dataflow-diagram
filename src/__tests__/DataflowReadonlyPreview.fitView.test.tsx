@@ -80,11 +80,16 @@ describe('DataflowReadonlyPreview — the fit waits for measurement (card 7338db
     expect(fitView).not.toHaveBeenCalled();
   });
 
-  it('fits once every visible node is measured, with the editor’s own options', () => {
+  it('fits once every visible node is measured, and reframes nothing that already worked', () => {
     storeState = { nodeLookup: lookup([['grp', MEASURED], ['logs', MEASURED], ['vault', MEASURED]]) };
     render(<DataflowReadonlyPreview content={CONTENT} />);
     expect(fitView).toHaveBeenCalledTimes(1);
-    expect(fitView).toHaveBeenCalledWith({ padding: 0.15, maxZoom: 1 });
+    // `padding: 0.1` is React Flow's default, i.e. what the declared <ReactFlow fitView>
+    // prop would have used had it run at the right moment — this card changes the TIMING of
+    // the fit, not its framing, and a diagram that already landed correctly keeps its exact
+    // zoom (devbox ea54c216: 0.763 before and after). `maxZoom: 1` is the deliberate part:
+    // the prop honours the canvas maxZoom of 4 and would open a small diagram blown up.
+    expect(fitView).toHaveBeenCalledWith({ padding: 0.1, maxZoom: 1 });
   });
 
   it('does not wait for hidden nodes, which the fit excludes anyway', () => {
