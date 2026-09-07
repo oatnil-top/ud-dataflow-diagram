@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ReactFlow, Background, ReactFlowProvider } from '@xyflow/react'
+import { ReactFlow, Background, ReactFlowProvider, ConnectionMode } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 // The dataflow stylesheet, not just ReactFlow's. Without it the node components'
 // own chrome has no opacity rule and shows unconditionally, and the read-only
@@ -96,6 +96,18 @@ function Preview({ content, diagram }: DataflowReadonlyPreviewProps) {
             onNodeMouseEnter={onNodeMouseEnter}
             onNodeMouseLeave={onNodeMouseLeave}
             fitView
+            /* Loose, exactly as the editor canvas (DataflowCanvas.tsx) — and not optional.
+               Every perimeter handle a node exposes is type="source" (NodePerimeterHandles:
+               the editor went all-source + Loose as one change in 6ad6ecde2, because a
+               stored pipe may leave from or arrive at any side). So a pipe's targetHandle
+               names a SOURCE handle, and React Flow only searches a node's source handles
+               for an edge's target end under Loose. Under the default Strict it finds no
+               target handle, returns no position, and draws nothing — silently, because
+               the error-008 warning goes through devWarn and a production build never
+               prints it. That is how this viewer showed every node and zero edges from
+               the day it was introduced until card 89b04194. Sharing the node registry
+               with the editor pulls in its handle scheme; this is the other half of it. */
+            connectionMode={ConnectionMode.Loose}
             minZoom={0.05}
             maxZoom={4}
             nodesDraggable={false}
