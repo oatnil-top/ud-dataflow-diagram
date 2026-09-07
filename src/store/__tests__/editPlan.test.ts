@@ -330,5 +330,9 @@ link gw -> g`)
     expect(result?.addedPipes).toBe(1)
     const pipe = store.getState().pipes[0]
     expect(pipe).toMatchObject({ source: 'gw', target: 'g' })
+    // ...and it lands on a real perimeter handle, filled from geometry like any other
+    // node-level link (card 20d64f9b — a group endpoint is not a special case).
+    expect(pipe.sourceHandle).toMatch(/^node-(top|right|bottom|left)$/)
+    expect(pipe.targetHandle).toMatch(/^node-(top|right|bottom|left)$/)
   })
 })

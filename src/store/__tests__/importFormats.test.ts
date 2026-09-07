@@ -3,9 +3,12 @@ import { describe, it, expect } from 'vitest'
 import {
   detectLegacyDialect,
   estimateNodeSize,
+  fillMissingHandles,
   parseImportedGraph,
   type ImportContext,
 } from '../importFormats'
+import type { Node } from '@xyflow/react'
+import type { Pipe } from '../flowStore'
 
 const ctx = (): ImportContext => {
   let n = 0
@@ -195,6 +198,42 @@ describe('estimateNodeSize', () => {
     // Collapsed renders a 32×32 square regardless of content or style
     expect(estimateNodeSize({ type: 'note', style: { width: 600, height: 400 }, data: { name: 'n', collapsed: true, content: 'x'.repeat(120) } }))
       .toEqual({ width: 32, height: 32 })
+  })
+
+  it('a collapsed group is its chip, not its container — style is ignored (card 20d64f9b)', () => {
+    const collapsed = estimateNodeSize({ type: 'group', style: { width: 700, height: 360 }, data: { name: 'VNet', collapsed: true } })
+    expect(collapsed.height).toBe(28)
+    expect(collapsed.width).toBeLessThan(200)
+    // ...and an expanded group still measures the container the author declared.
+    expect(estimateNodeSize({ type: 'group', style: { width: 700, height: 360 }, data: { name: 'VNet' } }))
+      .toEqual({ width: 700, height: 360 })
+  })
+})
+
+describe('fillMissingHandles with a group endpoint', () => {
+  // A pipe may name a group exactly like any other node (card 20d64f9b). Geometry then
+  // has to answer for the group too, or React Flow attaches the edge to whatever handle
+  // happens to be first and the line leaves the wrong side of the box.
+  const nodes = [
+    { id: 'vpc', type: 'group', position: { x: 0, y: 0 }, style: { width: 400, height: 300 }, data: { name: 'VPC' } },
+    { id: 'api', type: 'icon', position: { x: 900, y: 100 }, data: { name: 'api', icon: 'lucide:Server' } },
+  ] as unknown as Node[]
+
+  it('fills node-* handles from the facing sides', () => {
+    const pipes = [{ id: 'p', type: 'dataflow', source: 'api', target: 'vpc' }] as Pipe[]
+    fillMissingHandles(nodes, pipes)
+    expect(pipes[0]).toMatchObject({ sourceHandle: 'node-left', targetHandle: 'node-right' })
+  })
+
+  it('measures a COLLAPSED group as its chip, which can flip the facing side', () => {
+    const collapsed = [
+      { ...nodes[0], data: { name: 'VPC', collapsed: true } },
+      // Directly below the chip (28px tall) but inside the expanded container's 300px.
+      { id: 'api', type: 'icon', position: { x: 20, y: 200 }, data: { name: 'api', icon: 'lucide:Server' } },
+    ] as unknown as Node[]
+    const pipes = [{ id: 'p', type: 'dataflow', source: 'vpc', target: 'api' }] as Pipe[]
+    fillMissingHandles(collapsed, pipes)
+    expect(pipes[0]).toMatchObject({ sourceHandle: 'node-bottom', targetHandle: 'node-top' })
   })
 })
 

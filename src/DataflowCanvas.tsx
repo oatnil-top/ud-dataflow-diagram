@@ -39,6 +39,7 @@ import { useCanvasPaste } from './hooks/useCanvasPaste'
 import { computeGroupDropUpdates, applyGroupDropUpdates } from './utils/groupDrop'
 import { routePipe } from './utils/autoRoute'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
+import { applyCollapsedGroups } from './utils/collapsedGroups'
 import { nodeTypes, edgeTypes } from './registry'
 import { useCollapsedNoteEdges, NOTE_EDGE_REVEALED } from './hooks/useCollapsedNoteEdges'
 
@@ -82,9 +83,14 @@ function Flow({ store, embedMode }: FlowProps) {
   const arrangeSelection = store((state) => state.arrangeSelection)
   const applyPipeWaypoints = store((state) => state.applyPipeWaypoints)
 
-  // Collapsed note/resource nodes render without their persisted size —
+  // A collapsed group hides its members and redraws their crossing edges to its chip
+  // (card 20d64f9b). Pure and identity-preserving: with no group collapsed these are the
+  // very arrays the store holds, so nothing downstream re-renders.
+  const collapsedGroups = useMemo(() => applyCollapsedGroups(nodes, pipes), [nodes, pipes])
+
+  // Collapsed note/resource/group nodes render without their persisted size —
   // see stripSizeWhenCollapsed for why the store keeps it and the render drops it
-  const renderNodes = useMemo(() => stripSizeWhenCollapsed(nodes), [nodes])
+  const renderNodes = useMemo(() => stripSizeWhenCollapsed(collapsedGroups.nodes), [collapsedGroups.nodes])
 
   // Collapsed notes hide their own edges; hovering either end brings them back
   // (card a8596103). Canvas-level, like handleNodeClick and for the same reason:
@@ -209,7 +215,7 @@ function Flow({ store, embedMode }: FlowProps) {
   // Compute highlighted pipes - a pipe is highlighted if both endpoints are in the color map
   // Pipes with existing styles (note/image dashed lines) preserve their style unless highlighted
   const styledEdges = useMemo(() => {
-    return pipes.map((pipe) => {
+    return collapsedGroups.pipes.map((pipe) => {
       // Selection-first endpoints (owner, 2026-08-27: 选中线条才显示线条的
       // handler): an edge's ends are grabbable only while the edge is
       // SELECTED — reconnectable gates React Flow's invisible r=10 grab
@@ -231,6 +237,10 @@ function Flow({ store, embedMode }: FlowProps) {
       // carries pipe.style (the dashed look) and the `if (pipe.style) return base`
       // early-return further down would otherwise drop the class on the floor — which
       // is exactly the shape of "a perfectly legal render of the wrong thing".
+      // An edge redrawn to a collapsed group's chip is not grabbable: dragging its end
+      // would rewrite the REAL pipe's endpoint to the group, silently rehoming an edge
+      // whose actual endpoint is hidden (PipeData.groupMerged).
+      const merged = !!(pipe.data as { groupMerged?: boolean } | undefined)?.groupMerged
       const noteClass = noteEdgeClasses.get(pipe.id)
       const base = noteClass
         ? {
@@ -238,10 +248,10 @@ function Flow({ store, embedMode }: FlowProps) {
             // The <g> gets the class; the portalled label cannot, so it reads these
             // two off data instead (PipeData.noteMuted).
             data: { ...pipe.data, noteMuted: true, noteRevealed: noteClass.includes(NOTE_EDGE_REVEALED) },
-            reconnectable: !!pipe.selected,
+            reconnectable: !!pipe.selected && !merged,
             zIndex: pipe.selected ? 1001 : 0,
           }
-        : { ...pipe, reconnectable: !!pipe.selected, zIndex: pipe.selected ? 1001 : 0 }
+        : { ...pipe, reconnectable: !!pipe.selected && !merged, zIndex: pipe.selected ? 1001 : 0 }
       // ONE highlight style; two ways an edge gets selected into it (card efd95471).
       //
       //  - a FIELD selection colours handles, and an edge is lit when BOTH its ends are
@@ -271,7 +281,7 @@ function Flow({ store, embedMode }: FlowProps) {
       if (pipe.style) return noteClass ? { ...base, className: noteClass } : base
       return { ...base, className: noteClass ?? '', style: undefined }
     })
-  }, [pipes, fieldColorMap, pipeColorMap, noteEdgeClasses])
+  }, [collapsedGroups.pipes, fieldColorMap, pipeColorMap, noteEdgeClasses])
 
   // The AI Collaborate dock remembers whether it was left open across sessions —
   // "keep it while I edit" is a way of working, not a per-visit choice (owner,

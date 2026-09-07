@@ -144,8 +144,9 @@ ${DATAFLOW_PROMPT_BODY}`
  * so the variants cannot drift apart — and every variant is a complete standalone
  * prompt (intro + its commands + its rules + a self-consistent example).
  *
- * Full prompt: 2346 bytes (~590 tokens, measured 2026-09-04; the icon whitelist is
- * ~440 bytes of that). The delivered artifacts, not drafts.
+ * Full prompt: 2438 bytes (measured 2026-09-07, after the group-endpoint clause was
+ * added for card 20d64f9b; it was 2346 bytes / ~590 tokens measured 2026-09-04, of which
+ * the icon whitelist is ~440). The delivered artifacts, not drafts.
  */
 
 const PROMPT_INTRO = `Turn my request into diagram edit commands — plain text, ONE command per line, nothing else. No JSON, no code fence, no explanations.`
@@ -158,7 +159,7 @@ const COMMANDS_LINK = `link <sourceId> -> <targetId>`
 const RULES_DATA = `- "node" is a data entity (table, API object). With a new id it CREATES; with an existing id it MODIFIES: the display name is replaced, listed fields are added or updated by name, existing fields are never removed.
 - <type> is one of string | number | boolean | uuid | object (optional, default string). Nested fields use dots: address.city string`
 const RULES_ARCH = `- "icon" is an architecture element (service, gateway, queue...). <icon-id> is lucide:<Name>, Name one of: User Users Building2 Contact Server Cpu Monitor Laptop Smartphone Tablet Terminal Container Database HardDrive Archive FolderOpen MemoryStick Globe Network Wifi Router Cable Cloud CloudCog CloudUpload CloudDownload Shield Lock Key ShieldCheck Fingerprint Mail MessageSquare Bell Send Webhook Blocks Workflow Plug GitBranch RefreshCcw Layers Boxes Cog Zap BarChart3 FileText Clock Sparkles
-- "group" draws a container around EXISTING members — write the members' own lines first. @<preset> is optional, one of cloud region network security cluster service danger subtle (a VPC is @network, a k8s/AKS cluster is @cluster).`
+- "group" draws a container around EXISTING members — write the members' own lines first. @<preset> is optional, one of cloud region network security cluster service danger subtle (a VPC is @network, a k8s/AKS cluster is @cluster). A group id is a valid link endpoint: "link web -> vpc" draws one line to the container instead of one per member.`
 const RULES_COMMON = `- ids are short ascii words; the display name may be in any language; the ": ..." part is optional.
 - "link" connects two ids — ids from my current graph (I may paste it in this chat) or ids you created above. To connect two specific fields: link users.id -> orders.user_id
 - Direction follows the reference: from the entity being referenced to the entity holding the reference.

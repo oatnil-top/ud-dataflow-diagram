@@ -1,12 +1,13 @@
-import { memo, useState, useCallback, useRef } from 'react'
+import { memo, useState, useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { type NodeProps, type Node, NodeResizer, useViewport } from '@xyflow/react'
-import { Pencil, Check, X, Trash2, Link2, Code2 } from 'lucide-react'
+import { type NodeProps, type Node, NodeResizer, useViewport, useUpdateNodeInternals } from '@xyflow/react'
+import { Pencil, Check, X, Trash2, Link2, Code2, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import type { GroupNodeData, GroupStylePreset } from '../../types'
 import { useFlowStore } from '../../store/flowStoreContext'
 import { sanitizeNodeUrl } from '../../utils/sanitizeUrl'
 import NodeIcon from '../icons/NodeIcon'
 import IconPicker from '../icons/IconPicker'
+import NodePerimeterHandles, { handleStyle } from './NodePerimeterHandles'
 import { isImeComposing } from '../../utils/ime'
 import { useMultiSelection } from '../../hooks/useMultiSelection'
 
@@ -82,7 +83,15 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
   const updateNodeUrl = flowStore((state) => state.updateNodeUrl)
   const removeNode = flowStore((state) => state.removeNode)
   const setRawEditNode = flowStore((state) => state.setRawEditNode)
+  // Hover comes from the shared store, like NoteNode: the canvas fills it from the node
+  // WRAPPER (useCollapsedNoteEdges), so the handles fade in wherever the pointer is over
+  // the group. The component writes it too, so the package still works for a host that
+  // mounts its own canvas without those handlers.
+  const hovered = flowStore((state) => state.hoveredNodeId === id)
+  const setHoveredNode = flowStore((state) => state.setHoveredNode)
+  const clearHoveredNode = flowStore((state) => state.clearHoveredNode)
   const { y: vpY, zoom } = useViewport()
+  const updateNodeInternals = useUpdateNodeInternals()
   const containerRef = useRef<HTMLDivElement>(null)
 
   const [isEditing, setIsEditing] = useState(false)
@@ -108,6 +117,34 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
     }
     return d
   })
+
+  // How many nodes this group is currently swallowing — shown on the chip so a folded
+  // group says what it costs to open. Only computed while collapsed, and like `depth` the
+  // selector returns a PRIMITIVE: subscribing to the nodes array would re-render every
+  // group on every drag frame of any node.
+  const hiddenCount = flowStore((state) => {
+    if (!data.collapsed) return 0
+    const parentOf = new Map(state.nodes.map((n) => [n.id, n.parentId]))
+    let count = 0
+    for (const n of state.nodes) {
+      if (n.id === id) continue
+      const seen = new Set<string>([n.id])
+      let parentId = parentOf.get(n.id)
+      while (parentId && !seen.has(parentId)) {
+        if (parentId === id) { count++; break }
+        seen.add(parentId)
+        parentId = parentOf.get(parentId)
+      }
+    }
+    return count
+  })
+
+  // The chip and the frame are different sizes, so React Flow has to re-measure the four
+  // perimeter handles when this flips — otherwise the edges keep landing on the old
+  // perimeter. Same effect NoteNode runs for the same reason.
+  useEffect(() => {
+    updateNodeInternals(id)
+  }, [id, data.collapsed, updateNodeInternals])
 
   // Resolve effective style from preset + overrides + depth
   const style = resolveGroupStyle(data, depth)
@@ -162,6 +199,54 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
     updateGroupNode?.(id, { icon: undefined })
   }, [id, updateGroupNode])
 
+  const toggleCollapsed = useCallback(() => {
+    updateGroupNode?.(id, { collapsed: !data.collapsed })
+  }, [id, data.collapsed, updateGroupNode])
+
+  const handleClass = handleStyle('slate', hovered || selected)
+
+  // Collapsed: a chip where the frame was. Its descendants and their edges are dealt
+  // with at the render boundary (utils/collapsedGroups.ts) — this component only draws
+  // the chip and knows nothing about what it hides beyond the count.
+  //
+  // No NodeResizer: there is nothing to size. The position is the group's own, untouched,
+  // so expanding puts the frame back exactly where it was. Deliberately NOT carrying
+  // style.opacity over: opacity applies to the children too, and a 40%-transparent frame
+  // is a background wash while a 40%-transparent chip is unreadable text.
+  if (data.collapsed) {
+    return (
+      <div
+        ref={containerRef}
+        className="group inline-flex h-7 items-center gap-1.5 px-2 relative cursor-pointer select-none"
+        style={{
+          backgroundColor: style.bgColor,
+          border: `${style.borderWidth}px ${style.borderStyle} ${effectiveBorderColor}`,
+          borderRadius: style.borderRadius,
+        }}
+        onMouseEnter={() => setHoveredNode(id)}
+        onMouseLeave={() => clearHoveredNode(id)}
+        onDoubleClick={toggleCollapsed}
+      >
+        <NodePerimeterHandles className={handleClass} />
+        {data.icon && <NodeIcon iconId={data.icon} size={14} style={{ color: '#475569' }} />}
+        <span className="text-[13px] font-medium whitespace-nowrap" style={{ color: '#111111' }}>
+          {data.name}
+        </span>
+        <span className="text-[10px] whitespace-nowrap" style={{ color: '#94a3b8' }}>
+          {t('resources.dataflow.node.hiddenNodes', { count: hiddenCount })}
+        </span>
+        <button
+          onClick={toggleCollapsed}
+          className="nodrag p-0.5 rounded hover:bg-black/5 transition-colors"
+          style={{ color: '#64748b' }}
+          title={t('resources.dataflow.node.expandGroup')}
+        >
+          <ChevronsUpDown size={12} />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div
       ref={containerRef}
@@ -174,7 +259,15 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
         minWidth: 200,
         minHeight: 100,
       }}
+      onMouseEnter={() => setHoveredNode(id)}
+      onMouseLeave={() => clearHoveredNode(id)}
     >
+      {/* A group is connectable like every other node (card 20d64f9b): the same four
+          `node-*` ids, so an edge naming a group is the same wire format as any other
+          edge. They sit on this element because it IS the visible body — React Flow
+          reads handle bounds out of the DOM, and the frame is what the user sees. */}
+      <NodePerimeterHandles className={handleClass} />
+
       <NodeResizer
         minWidth={200}
         minHeight={100}
@@ -318,6 +411,14 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
               title={t('common.edit')}
             >
               <Pencil size={12} />
+            </button>
+            <button
+              onClick={toggleCollapsed}
+              className="p-0.5 rounded hover:bg-black/5 transition-colors opacity-0 group-hover:opacity-100"
+              style={{ color: '#64748b' }}
+              title={t('resources.dataflow.node.collapseGroup')}
+            >
+              <ChevronsDownUp size={12} />
             </button>
             <button
               onClick={() => removeNode?.(id)}

@@ -39,6 +39,19 @@ describe('stripSizeWhenCollapsed', () => {
     expect(collapsedNoteWithWidth.width).toBe(680)
   })
 
+  it('drops a collapsed GROUP\u2019s container size, and keeps an expanded one\u2019s', () => {
+    // Card 20d64f9b: the container size is what makes a group a container. A collapsed
+    // group renders as a small chip, so keeping 700\u00d7360 would leave an invisible
+    // rectangle over the whole region its members used to occupy.
+    const collapsed = { id: 'g', type: 'group', position: { x: 0, y: 0 }, style: { width: 700, height: 360 }, data: { name: 'VNet', collapsed: true } } as AnyNode
+    const [out] = stripSizeWhenCollapsed([collapsed])
+    expect(out.style).toBeUndefined()
+    expect(out.width).toBeUndefined()
+
+    const expanded = { ...collapsed, data: { name: 'VNet' } } as AnyNode
+    expect(stripSizeWhenCollapsed([expanded])[0]).toBe(expanded)
+  })
+
   it('returns expanded and sizeless nodes untouched (same reference)', () => {
     const expanded = { ...collapsedNoteWithWidth, id: 'n3', data: { ...collapsedNoteWithWidth.data, collapsed: false } } as AnyNode
     const sizeless = { id: 'n4', type: 'note', position: { x: 0, y: 0 }, data: { name: 'n', content: '', collapsed: true } } as AnyNode

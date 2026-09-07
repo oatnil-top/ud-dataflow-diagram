@@ -110,6 +110,17 @@ export interface GroupNodeData extends ElementData {
   opacity?: number         // Background opacity 0-100
   rounded?: boolean        // Rounded corners (default true)
   stylePreset?: GroupStylePreset  // Named preset — sets defaults for all style fields
+  /**
+   * Folded shut. Persisted with the document exactly like NoteNodeData.collapsed
+   * (exportGraph keeps node.data wholesale), and OPTIONAL on purpose: a diagram written
+   * before card 20d64f9b has no such key and reads as expanded.
+   *
+   * When true the group renders as a chip (GroupNode.tsx), its descendants are hidden,
+   * and every edge crossing its boundary is redrawn to the chip — all of that at the
+   * render boundary in utils/collapsedGroups.ts. The store, the wire format and the
+   * handles are untouched, so expanding restores the diagram exactly.
+   */
+  collapsed?: boolean
 }
 
 // Icon Node - standalone architecture icon (server, database, user, cloud resource etc.)
@@ -192,6 +203,14 @@ export interface PipeData extends ElementData {
    */
   noteMuted?: boolean
   noteRevealed?: boolean
+  /**
+   * Transient (render-only, never persisted — like noteMuted above): this pipe had at
+   * least one end inside a COLLAPSED group and was redrawn to the group's chip
+   * (utils/collapsedGroups.ts, card 20d64f9b). DataflowCanvas reads it to keep the edge
+   * un-reconnectable: dragging the end of a merged line would rewrite the REAL pipe's
+   * endpoint to the group, silently rehoming an edge the user cannot even see.
+   */
+  groupMerged?: boolean
 }
 
 // Map from element type string to its data type

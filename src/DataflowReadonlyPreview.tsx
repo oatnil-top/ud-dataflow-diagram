@@ -8,6 +8,7 @@ import './index.css'
 
 import { nodeTypes, edgeTypes } from './registry'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
+import { applyCollapsedGroups } from './utils/collapsedGroups'
 import PipeMarkerDefs from './components/PipeMarkerDefs'
 import { createFlowStore } from './store/flowStore'
 import { FlowStoreContext } from './store/flowStoreContext'
@@ -45,10 +46,18 @@ function Preview({ content, diagram }: DataflowReadonlyPreviewProps) {
   })
 
   const storeNodes = store((s) => s.nodes)
-  const pipes = store((s) => s.pipes)
+  const storePipes = store((s) => s.pipes)
+  // ...and the same collapsed-GROUP transform (card 20d64f9b). A diagram saved with a
+  // folded group must open folded HERE too — this viewer is where a shared diagram is
+  // read, and a group that unfolded itself in the viewer would be a different diagram
+  // from the one the author saved.
+  const { nodes: groupedNodes, pipes } = useMemo(
+    () => applyCollapsedGroups(storeNodes, storePipes),
+    [storeNodes, storePipes],
+  )
   // Same render-boundary size strip as the editor canvas — a collapsed note
   // keeps its expanded size in the data but must not occupy it on screen
-  const nodes = useMemo(() => stripSizeWhenCollapsed(storeNodes), [storeNodes])
+  const nodes = useMemo(() => stripSizeWhenCollapsed(groupedNodes), [groupedNodes])
 
   // ...and the same collapsed-note edge muting, for the same reason: this viewer is
   // where the card's diagram is actually read (card a8596103). Read-only does not mean

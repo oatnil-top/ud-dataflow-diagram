@@ -874,11 +874,38 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
 
     updateGroupNode: (nodeId, data) => {
       pushSnapshot()
+      const nodes = get().nodes.map((node) =>
+        node.id === nodeId && isGroupNode(node)
+          ? { ...node, data: { ...node.data, ...data } }
+          : node
+      )
+      if (data.collapsed !== true) {
+        set({ nodes })
+        return
+      }
+      // Collapsing hides the members (utils/collapsedGroups.ts, card 20d64f9b). A hidden
+      // node that is still `selected` keeps counting in the selection bar and still
+      // answers to Delete — the user would be deleting things they cannot see. So the
+      // subtree and every pipe touching it are deselected here, where the collapse
+      // happens, rather than in the render transform: selection is store state.
+      const parentOf = new Map(nodes.map((n) => [n.id, n.parentId]))
+      const inside = (id: string): boolean => {
+        const seen = new Set<string>([id])
+        let parentId = parentOf.get(id)
+        while (parentId && !seen.has(parentId)) {
+          if (parentId === nodeId) return true
+          seen.add(parentId)
+          parentId = parentOf.get(parentId)
+        }
+        return false
+      }
+      const hiddenIds = new Set(nodes.filter((n) => inside(n.id)).map((n) => n.id))
       set({
-        nodes: get().nodes.map((node) =>
-          node.id === nodeId && isGroupNode(node)
-            ? { ...node, data: { ...node.data, ...data } }
-            : node
+        nodes: nodes.map((n) => (n.selected && hiddenIds.has(n.id) ? { ...n, selected: false } : n)),
+        pipes: get().pipes.map((p) =>
+          p.selected && (hiddenIds.has(p.source) || hiddenIds.has(p.target))
+            ? { ...p, selected: false }
+            : p
         ),
       })
     },

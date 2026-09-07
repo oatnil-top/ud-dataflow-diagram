@@ -3,6 +3,7 @@ import type { AnyNode, Pipe } from './flowStore'
 import type { Field, JsonNodeData, OutputField, ProcessNodeData } from '../types'
 import { generateId } from '../types'
 import { sortNodesParentsFirst } from '../utils/nodeOrder'
+import { collapsedGroupChipSize } from '../utils/collapsedNodeSize'
 
 /**
  * Parser for the one JSON format accepted by importGraph: the full React Flow
@@ -502,6 +503,11 @@ export function estimateNodeSize(node: {
       && (node.data as { collapsed?: boolean } | undefined)?.collapsed) {
     return { width: 32, height: 32 }
   }
+  // Same early return for a collapsed group: it renders as a chip and the renderer
+  // strips its persisted container size too (card 20d64f9b).
+  if (node.type === 'group' && (node.data as { collapsed?: boolean } | undefined)?.collapsed) {
+    return collapsedGroupChipSize(node.data as { name?: string; icon?: string })
+  }
   if (node.type === 'note') {
     // A style-less note does not wrap: its width follows the longest content
     // line (measured on the AMPLS demo: 3 long lines rendered 975px against
@@ -708,6 +714,25 @@ export function computeTopologicalLayout(
  * untouched. Like solved positions, filled handles materialize on the first
  * human save.
  */
+/**
+ * The facing-sides rule, alone: dominant axis between two node CENTERS picks which
+ * perimeter handle each end should use. Extracted (card 20d64f9b) because collapsing a
+ * group re-points an edge at the group and has to recompute that end by exactly this
+ * rule — a second copy of it would be free to drift.
+ */
+export function facingHandles(
+  sourceCenter: { x: number; y: number },
+  targetCenter: { x: number; y: number },
+): { sourceHandle: string; targetHandle: string } {
+  const dx = targetCenter.x - sourceCenter.x
+  const dy = targetCenter.y - sourceCenter.y
+  const vertical = Math.abs(dy) >= Math.abs(dx)
+  return {
+    sourceHandle: vertical ? (dy >= 0 ? 'node-bottom' : 'node-top') : (dx >= 0 ? 'node-right' : 'node-left'),
+    targetHandle: vertical ? (dy >= 0 ? 'node-top' : 'node-bottom') : (dx >= 0 ? 'node-left' : 'node-right'),
+  }
+}
+
 export function fillMissingHandles(nodes: Node[], pipes: Pipe[], existingNodes: AnyNode[] = []): void {
   // Imported nodes win on a shared id (they are the ones being positioned right now);
   // existing ones are here so a pipe reaching onto the canvas can still find geometry.
@@ -729,13 +754,8 @@ export function fillMissingHandles(nodes: Node[], pipes: Pipe[], existingNodes: 
     const source = byId.get(pipe.source)
     const target = byId.get(pipe.target)
     if (!source || !target) continue
-    const sc = absCenter(source)
-    const tc = absCenter(target)
-    const dx = tc.x - sc.x
-    const dy = tc.y - sc.y
-    const vertical = Math.abs(dy) >= Math.abs(dx)
-    const wantSource = vertical ? (dy >= 0 ? 'node-bottom' : 'node-top') : (dx >= 0 ? 'node-right' : 'node-left')
-    const wantTarget = vertical ? (dy >= 0 ? 'node-top' : 'node-bottom') : (dx >= 0 ? 'node-left' : 'node-right')
+    const { sourceHandle: wantSource, targetHandle: wantTarget } =
+      facingHandles(absCenter(source), absCenter(target))
     if (pipe.sourceHandle == null) pipe.sourceHandle = wantSource
     if (pipe.targetHandle == null) pipe.targetHandle = wantTarget
   }
