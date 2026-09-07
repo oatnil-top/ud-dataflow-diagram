@@ -65,6 +65,20 @@ export interface FlowState {
    */
   hoveredNodeId: string | null
 
+  /**
+   * The folded group a drag is currently passing over, or null — the chip's "nothing goes
+   * in here" state (card 1cb78460). Written per drag frame by the canvas's onNodeDrag,
+   * cleared on drag stop.
+   *
+   * Same contract as `hoveredNodeId` above and for the same reasons: one store field so
+   * there is one truth, never in an undo snapshot (captureSnapshot takes nodes+pipes only)
+   * and never sets isDirty — hovering a chip mid-drag is not an edit. Read it with a
+   * PRIMITIVE selector (`state.dropRejectedGroupId === id`), the way GroupNode reads
+   * `depth` and `hiddenCount`: this field changes during a drag, which is exactly when a
+   * selector returning an object or an array would re-render every group every frame.
+   */
+  dropRejectedGroupId: string | null
+
   // Dirty tracking
   isDirty: boolean
   markClean: () => void
@@ -123,6 +137,12 @@ export interface FlowState {
    * hover the instant it was set, which shows up as edges that flicker off mid-sweep.
    */
   clearHoveredNode: (nodeId: string) => void
+
+  /**
+   * Set (or clear, with null) the folded group a drag is over. Writes only on an actual
+   * change, like setHoveredNode — this is called on every frame of every node drag.
+   */
+  setDropRejectedGroup: (nodeId: string | null) => void
 
   // Raw editor
   setRawEditNode: (nodeId: string | null) => void
@@ -330,6 +350,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
     clipboard: null,
     rawEditNodeId: null,
     hoveredNodeId: null,
+    dropRejectedGroupId: null,
     isDirty: false,
     canUndo: false,
     canRedo: false,
@@ -988,6 +1009,10 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
 
     clearHoveredNode: (nodeId) => {
       if (get().hoveredNodeId === nodeId) set({ hoveredNodeId: null })
+    },
+
+    setDropRejectedGroup: (nodeId) => {
+      if (get().dropRejectedGroupId !== nodeId) set({ dropRejectedGroupId: nodeId })
     },
 
     setRawEditNode: (nodeId) => {

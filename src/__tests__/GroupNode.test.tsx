@@ -55,8 +55,9 @@ const storeWith = (collapsed: boolean) => {
   return store;
 };
 
-const renderGroup = (collapsed: boolean) => {
+const renderGroup = (collapsed: boolean, dropRejected = false) => {
   const store = storeWith(collapsed);
+  if (dropRejected) store.getState().setDropRejectedGroup('vpc');
   const props = {
     id: 'vpc',
     data: { name: 'VNet', ...(collapsed ? { collapsed: true } : {}) },
@@ -98,6 +99,32 @@ describe('GroupNode', () => {
     expect(group.data).toMatchObject({ name: 'VNet', collapsed: true });
     // The container size stays in the store — expanding must put the frame back.
     expect(group.style).toMatchObject({ width: 400, height: 300 });
+  });
+
+  /**
+   * Card 1cb78460: dragging a node onto a folded chip did nothing AND said nothing, so the
+   * frame at release — node sitting on top of the chip — read as "it went in". It cannot go
+   * in (computeGroupDropUpdates refuses every collapsed group), so the chip says so while
+   * the pointer is still over it.
+   *
+   * Asserted as DATA and as the outline, not as a colour name: the outline is the part that
+   * has to survive, because React Flow paints the dragged node at z-index +1000 (dragging
+   * selects it) and anything drawn inside the chip's own box is behind the node covering it.
+   */
+  it('the chip shows a rejected state while a drag is over it, and none otherwise', () => {
+    const { container } = renderGroup(true, true);
+    const chip = container.querySelector('[data-drop-rejected]') as HTMLElement;
+    expect(chip).not.toBeNull();
+    expect(chip.style.outline).toContain('dashed');
+    expect(chip.className).toContain('cursor-no-drop');
+  });
+
+  it('a folded chip with no drag over it is unchanged', () => {
+    const { container } = renderGroup(true);
+    expect(container.querySelector('[data-drop-rejected]')).toBeNull();
+    const chip = screen.getByText('VNet').parentElement as HTMLElement;
+    expect(chip.style.outline).toBe('');
+    expect(chip.className).toContain('cursor-pointer');
   });
 
   it('collapsing deselects what it hides, so the selection bar cannot count invisible nodes', () => {

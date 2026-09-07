@@ -36,7 +36,7 @@ import { FlowStoreContext } from './store/flowStoreContext'
 import { DiagramContext, type DiagramContextValue } from './diagramContext'
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts'
 import { useCanvasPaste } from './hooks/useCanvasPaste'
-import { computeGroupDropUpdates, applyGroupDropUpdates } from './utils/groupDrop'
+import { computeGroupDropUpdates, applyGroupDropUpdates, findDropRejectingGroup } from './utils/groupDrop'
 import { routePipe } from './utils/autoRoute'
 import { stripSizeWhenCollapsed } from './utils/collapsedNodeSize'
 import { applyCollapsedGroups } from './utils/collapsedGroups'
@@ -60,6 +60,7 @@ function Flow({ store, embedMode }: FlowProps) {
   const onPipesChange = store((state) => state.onPipesChange)
   const onConnect = store((state) => state.onConnect)
   const reconnectPipe = store((state) => state.reconnectPipe)
+  const setDropRejectedGroup = store((state) => state.setDropRejectedGroup)
   const copyNodesToClipboard = store((state) => state.copyNodesToClipboard)
   const pasteNode = store((state) => state.pasteNode)
   const pasteNodesFromClipboard = store((state) => state.pasteNodesFromClipboard)
@@ -330,9 +331,25 @@ function Flow({ store, embedMode }: FlowProps) {
     takeSnapshot()
   }, [takeSnapshot])
 
+  /**
+   * Tell the folded group under the drag to say so (card 1cb78460).
+   *
+   * Fires every frame, hence `findDropRejectingGroup`'s early return on a diagram with no
+   * folded group and `setDropRejectedGroup`'s write-only-on-change guard — between them a
+   * normal drag costs one array filter per frame and zero renders.
+   *
+   * ⛔ This cannot come from hover. React Flow captures the pointer on the dragged node for
+   * the duration of a drag, so the chip's own onMouseEnter and the canvas's
+   * onNodeMouseEnter never fire for the node you are dragging OVER. It has to be geometry.
+   */
+  const handleNodeDrag = useCallback((_event: React.MouseEvent, _draggedNode: import('@xyflow/react').Node, draggedNodes: import('@xyflow/react').Node[]) => {
+    setDropRejectedGroup(findDropRejectingGroup(getNodes(), draggedNodes))
+  }, [getNodes, setDropRejectedGroup])
+
   // Drop node(s) into/out of groups on drag stop
   // When multiple nodes are selected, React Flow passes all dragged nodes as the third parameter
   const handleNodeDragStop = useCallback((_event: React.MouseEvent, _draggedNode: import('@xyflow/react').Node, draggedNodes: import('@xyflow/react').Node[]) => {
+    setDropRejectedGroup(null)
     const updates = computeGroupDropUpdates(getNodes(), draggedNodes)
 
     if (updates.size === 0) return
@@ -343,7 +360,7 @@ function Flow({ store, embedMode }: FlowProps) {
     store.setState((state) => ({
       nodes: applyGroupDropUpdates(state.nodes, updates),
     }))
-  }, [getNodes, store])
+  }, [getNodes, store, setDropRejectedGroup])
 
   /**
    * The visible canvas in SCREEN pixels — measured from the pane element, not the window.
@@ -541,6 +558,7 @@ function Flow({ store, embedMode }: FlowProps) {
           onNodeMouseLeave={onNodeMouseLeave}
           onEdgeClick={handleEdgeClick}
           onNodeDragStart={handleNodeDragStart}
+          onNodeDrag={handleNodeDrag}
           onNodeDragStop={handleNodeDragStop}
           onPaneContextMenu={handleContextMenu}
           onPaneClick={(event) => {

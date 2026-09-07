@@ -88,6 +88,10 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
   // the group. The component writes it too, so the package still works for a host that
   // mounts its own canvas without those handlers.
   const hovered = flowStore((state) => state.hoveredNodeId === id)
+  // A drag is currently over this folded group and it will not take the node (card
+  // 1cb78460). PRIMITIVE selector, like `depth` and `hiddenCount` below: this flips
+  // mid-drag, which is the worst possible moment to re-render every group in the diagram.
+  const dropRejected = flowStore((state) => state.dropRejectedGroupId === id)
   const setHoveredNode = flowStore((state) => state.setHoveredNode)
   const clearHoveredNode = flowStore((state) => state.clearHoveredNode)
   const { y: vpY, zoom } = useViewport()
@@ -217,11 +221,24 @@ function GroupNode({ id, data, selected, positionAbsoluteY }: NodeProps<GroupNod
     return (
       <div
         ref={containerRef}
-        className="group inline-flex h-7 items-center gap-1.5 px-2 relative cursor-pointer select-none"
+        // `data-drop-rejected` is the state as DATA, so a test or a QA pass can read the
+        // decision rather than eyeball a colour.
+        data-drop-rejected={dropRejected || undefined}
+        className={`group inline-flex h-7 items-center gap-1.5 px-2 relative select-none ${dropRejected ? 'cursor-no-drop' : 'cursor-pointer'}`}
         style={{
           backgroundColor: style.bgColor,
           border: `${style.borderWidth}px ${style.borderStyle} ${effectiveBorderColor}`,
           borderRadius: style.borderRadius,
+          // An OUTLINE, not a border or a background (card 1cb78460). React Flow paints a
+          // node being dragged at z-index +1000 because dragging selects it, so the node
+          // sits ON TOP of this chip — which is the whole complaint. A background tint or a
+          // border swap would be underneath it and invisible at exactly the moment it has
+          // something to say; an outline with an offset draws OUTSIDE the chip's box and
+          // stays visible as a ring around the node covering it. Dashed and rose, because
+          // nothing else in this diagram is either.
+          ...(dropRejected
+            ? { outline: '2px dashed #f43f5e', outlineOffset: 2 }
+            : {}),
         }}
         onMouseEnter={() => setHoveredNode(id)}
         onMouseLeave={() => clearHoveredNode(id)}
