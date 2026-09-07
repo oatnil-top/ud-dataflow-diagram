@@ -1,5 +1,12 @@
-import { useMemo, useState } from 'react'
-import { ReactFlow, Background, ReactFlowProvider, ConnectionMode } from '@xyflow/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  ReactFlow,
+  Background,
+  ReactFlowProvider,
+  ConnectionMode,
+  useReactFlow,
+  useStore,
+} from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 // The dataflow stylesheet, not just ReactFlow's. Without it the node components'
 // own chrome has no opacity rule and shows unconditionally, and the read-only
@@ -84,6 +91,8 @@ function Preview({ content, diagram }: DataflowReadonlyPreviewProps) {
     [diagram?.dataflowId, diagram?.historyId],
   )
 
+  useFitOnceMeasured(nodes.length > 0)
+
   return (
     <DiagramContext.Provider value={diagramContext}>
       <FlowStoreContext.Provider value={store}>
@@ -131,6 +140,65 @@ function Preview({ content, diagram }: DataflowReadonlyPreviewProps) {
       </FlowStoreContext.Provider>
     </DiagramContext.Provider>
   )
+}
+
+/**
+ * Land on the whole diagram — once, after React Flow has measured the nodes.
+ *
+ * This is the viewer's half of commit 8865912 ("the declared fitView was fitting one
+ * node"), which only ever fixed the editor. `fitView` on <ReactFlow> resolves ONE queued
+ * fit, and something consumes that queue a frame before anything has been measured:
+ * `GroupNode`, `NoteNode` and `ResourceNode` each call `useUpdateNodeInternals()(id)` in a
+ * mount effect (they exist to re-measure the perimeter handles when a chip and a frame
+ * swap). React Flow schedules that on a `requestAnimationFrame` and passes itself
+ * `{ triggerFitView: false }` — but the store's implementation never destructures that
+ * argument (`@xyflow/react` 12.10.0 declares the parameter in `types/store.d.ts` and drops
+ * it in the runtime). The rAF beats the ResizeObserver's first broadcast, so the fit sees
+ * the single node that call just measured, frames it, and empties the queue before the
+ * real measurements land.
+ *
+ * Measured in Chromium at a 1280x800 pane, a diagram spanning x:0..1270: icon nodes only
+ * fit at 0.909 and look right, but ONE group / note / resource anywhere in the diagram
+ * takes the viewer to 2.43 (expanded group: `min(1280/440, 800/330)`, i.e. the group's own
+ * 400x300 frame and nothing else) or to the 4.0 maxZoom when that group is collapsed and
+ * `stripSizeWhenCollapsed` has shrunk it to a chip — with the right-hand nodes off-screen
+ * either way. Collapse is not the trigger, it only makes the number worse.
+ *
+ * ⛔ The editor's `useNodesInitialized` gate does NOT work here, and looks like it should:
+ * that flag is only ever written by `setNodes`, and this viewer passes no `onNodesChange`,
+ * so measurements never flow back into the nodes prop and the flag stays false forever.
+ * Gate on React Flow's own `nodeLookup` instead — `updateNodeInternals` writes the store on
+ * both of its branches, so this selector re-runs when a measurement lands.
+ *
+ * `didFit` keeps it to once: this viewer never adds a node, but a `hidden` flip from the
+ * collapsed-note hover would otherwise re-frame the diagram under the reader.
+ *
+ * @param hasNodes false for an empty diagram, where every node is measured vacuously and a
+ *   fit would be a viewport jump to nothing.
+ */
+function useFitOnceMeasured(hasNodes: boolean): void {
+  const allMeasured = useStore((s) => {
+    if (s.nodeLookup.size === 0) return false
+    for (const [, node] of s.nodeLookup) {
+      // A hidden node (every descendant of a collapsed group) is excluded from the fit
+      // itself by @xyflow/system's getFitViewNodes, so waiting for it would hang forever.
+      if (node.hidden) continue
+      if (!node.measured?.width || !node.measured?.height) return false
+    }
+    return true
+  })
+  const { fitView } = useReactFlow()
+  const didFit = useRef(false)
+
+  useEffect(() => {
+    if (!hasNodes || !allMeasured || didFit.current) return
+    didFit.current = true
+    // The editor's landing, to the option (DataflowCanvas.tsx): the same diagram is read on
+    // both surfaces and they must frame it the same way. `maxZoom: 1` is the half that has
+    // to be written out — the <ReactFlow fitView> prop honours the canvas maxZoom of 4, so
+    // a diagram smaller than the pane would open blown up.
+    void fitView({ padding: 0.15, maxZoom: 1 })
+  }, [hasNodes, allMeasured, fitView])
 }
 
 export default function DataflowReadonlyPreview(props: DataflowReadonlyPreviewProps) {
