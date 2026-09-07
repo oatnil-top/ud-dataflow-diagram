@@ -147,6 +147,24 @@ describe('applyCollapsedGroups — pipes', () => {
     expect((map.p1.data as { description?: string }).description).toBeUndefined()
   })
 
+  it('hides a rewritten edge that lands on an edge the author already drew to the group', () => {
+    // Found in browser QA on the devbox: a diagram carrying BOTH "client -> vnet" and
+    // "client -> gw" (gw inside vnet) drew two lines on the same pair of handles with
+    // both labels stacked. Dedupe compared rewritten edges only to each other, never to
+    // an untouched edge already pointing at the group.
+    const g = graph()
+    const declared = pipe({ id: 'declared', source: 'out', target: 'gA', sourceHandle: 'node-left', targetHandle: 'node-right', data: { name: '', description: 'A -> group' } as never })
+    const crossing = pipe({ id: 'crossing', source: 'out', target: 'c1', sourceHandle: 'node-left', targetHandle: 'node-top', data: { name: '', description: 'A -> child' } as never })
+    const { pipes } = applyCollapsedGroups(g.nodes, [declared, crossing])
+    const map = byId(pipes)
+
+    // The author's own edge wins outright — untouched, label and all: it is still true.
+    expect(map.declared).toBe(declared)
+    expect((map.declared.data as { description?: string }).description).toBe('A -> group')
+    expect(map.crossing.hidden).toBe(true)
+    expect(pipes.filter((p) => !p.hidden)).toHaveLength(1)
+  })
+
   it('keeps the label of a rewritten edge that merged with nothing', () => {
     const g = graph()
     const { pipes } = applyCollapsedGroups(g.nodes, [

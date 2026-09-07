@@ -28,11 +28,19 @@ import { estimateNodeSize, facingHandles } from '../store/importFormats'
  *  5. `data.waypoints` is dropped on a rewritten pipe. Those anchors are absolute points
  *     drawn for the old endpoints; kept, they bend the new line through the middle of
  *     the collapsed region.
- *  6. Rewritten pipes that end up with the same (source, target, sourceHandle,
- *     targetHandle) are one line on screen: the first survives, the rest are hidden, and
- *     a survivor that swallowed others loses `data.description` — two different labels
- *     stacked on one line read as one false sentence (the same reason PipeData carries
- *     labelOffset).
+ *  6. Pipes that end up on the same (source, target, sourceHandle, targetHandle) are one
+ *     line on screen, so only one of them may be drawn. An UNTOUCHED pipe always wins
+ *     that line, label and all — it is the edge the author drew to the group and it is
+ *     still exactly true. Otherwise the first rewritten pipe survives; every other
+ *     rewritten pipe on that line is hidden, and a survivor that swallowed others loses
+ *     `data.description`, because two different labels stacked on one line read as one
+ *     false sentence (the same reason PipeData carries labelOffset).
+ *
+ *     ⚠️ Comparing rewritten pipes only to EACH OTHER is not enough, and looks right:
+ *     a diagram carrying both `client -> vnet` and `client -> gw` (gw inside vnet) drew
+ *     two lines on one pair of handles with both labels stacked, because the second was
+ *     the only rewritten one and had nothing to collide with. Found in browser QA, not
+ *     here — hence the seeded key set below and the test named after it.
  *  7. A pipe already drawn to the collapsed group is untouched. The group is still there.
  *
  * IDENTITY MATTERS: with nothing collapsed this returns the caller's own arrays, and a
@@ -86,9 +94,10 @@ export function applyCollapsedGroups(
   const outNodes = nodes.map((node) =>
     hiddenBy(node.id) ? ({ ...node, hidden: true } as AnyNode) : node)
 
-  /** How many rewritten pipes landed on each (source, target, handles) line. */
-  const mergedInto = new Map<string, number>()
-  const survivor = new Map<string, string>()
+  /** One line on screen = one (source, target, sourceHandle, targetHandle). */
+  const lineKey = (p: Pipe) =>
+    `${p.source} ${p.target} ${p.sourceHandle ?? ''} ${p.targetHandle ?? ''}`
+
   const rewritten = new Map<string, { key: string; pipe: Pipe }>()
 
   const outPipes = pipes.map((pipe) => {
@@ -112,15 +121,28 @@ export function applyCollapsedGroups(
       data: { ...data, groupMerged: true },
     } as Pipe
 
-    const key = `${next.source} ${next.target} ${next.sourceHandle ?? ''} ${next.targetHandle ?? ''}`
-    mergedInto.set(key, (mergedInto.get(key) ?? 0) + 1)
-    if (!survivor.has(key)) survivor.set(key, next.id)
-    rewritten.set(next.id, { key, pipe: next })
+    rewritten.set(next.id, { key: lineKey(next), pipe: next })
     return next
   })
 
-  // Second pass, because "did anything else merge onto this line" is only knowable
-  // once every pipe has been mapped.
+  // Everything below needs the WHOLE mapped list, so it is a second pass: neither "is
+  // this line already the author's own edge" nor "did anything else merge onto it" is
+  // knowable while the pipes are still being mapped one at a time.
+  //
+  // The key set is SEEDED with every untouched pipe (rule 6): those are drawn as-is, so
+  // a rewritten pipe landing on one of their lines has nothing left to draw.
+  const declaredKeys = new Set<string>()
+  for (const pipe of outPipes) {
+    if (!rewritten.has(pipe.id) && !pipe.hidden) declaredKeys.add(lineKey(pipe))
+  }
+  const mergedInto = new Map<string, number>()
+  const survivor = new Map<string, string>()
+  for (const { key, pipe } of rewritten.values()) {
+    if (declaredKeys.has(key)) continue
+    mergedInto.set(key, (mergedInto.get(key) ?? 0) + 1)
+    if (!survivor.has(key)) survivor.set(key, pipe.id)
+  }
+
   return {
     nodes: outNodes,
     pipes: outPipes.map((pipe) => {
