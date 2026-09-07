@@ -265,6 +265,36 @@ export interface HandleRename {
 }
 
 /**
+ * The size keys a COPY has to carry — card dd36fb76.
+ *
+ * A node's size lives in TWO places and both are load-bearing, because React Flow reads
+ * `node.width ?? node.style?.width` (getNodeInlineStyleDimensions, @xyflow/react 12.10):
+ *
+ *   style.width/height   written once, at creation and at import (addGroupNode's 400x300,
+ *                        importFormats' SIZE_BY_TYPE) — and never updated afterwards.
+ *   width/height         written by NodeResizer, at the TOP LEVEL: it emits a `dimensions`
+ *                        change with `setAttributes: true`, and applyNodeChanges assigns
+ *                        `element.width` / `element.height`, leaving `style` alone.
+ *
+ * So every node the user has ever dragged a resize handle on carries its real size in
+ * width/height while style still holds the size it was born with. A copy constructor that
+ * rebuilds the node from a field list and forgets these two keys silently resets the copy
+ * to its birth size — a resized 780x540 group came back 400x300 (the creation default),
+ * which is what "复制的时候有些 group 节点的尺寸都变了" was.
+ *
+ * `measured` is deliberately NOT carried: it is React Flow's own measurement of what is on
+ * screen right now, which for a collapsed group is the ~150x28 chip. Copying it would do
+ * exactly the freezing the render boundary (collapsedNodeSize.ts) exists to prevent.
+ */
+function copiedSize(node: Pick<AnyNode, 'width' | 'height' | 'style'>) {
+  return {
+    ...(node.style ? { style: JSON.parse(JSON.stringify(node.style)) } : {}),
+    ...(typeof node.width === 'number' ? { width: node.width } : {}),
+    ...(typeof node.height === 'number' ? { height: node.height } : {}),
+  }
+}
+
+/**
  * Create a flow store instance.
  * In embed mode (when used within DataflowEditor), each editor gets its own store instance.
  * This prevents state conflicts between multiple editors or between the editor and external state.
@@ -569,8 +599,8 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       const newId = generateNodeId()
       const offset = { x: 50, y: 50 }
 
-      // Deep clone the data; keep style (persisted size) and parentId
-      // (position is parent-relative, so the copy must stay in the group)
+      // Deep clone the data; keep the size (copiedSize — BOTH places it can live) and
+      // parentId (position is parent-relative, so the copy must stay in the group)
       const clonedData = JSON.parse(JSON.stringify(node.data))
 
       const newNode: AnyNode = {
@@ -581,7 +611,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
           y: node.position.y + offset.y,
         },
         data: clonedData,
-        ...(node.style ? { style: JSON.parse(JSON.stringify(node.style)) } : {}),
+        ...copiedSize(node),
         ...(node.parentId && get().nodes.some((n) => n.id === node.parentId)
           ? { parentId: node.parentId }
           : {}),
@@ -618,7 +648,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
             ? { ...node.position }
             : { x: node.position.x + offset.x, y: node.position.y + offset.y },
           data: JSON.parse(JSON.stringify(node.data)),
-          ...(node.style ? { style: JSON.parse(JSON.stringify(node.style)) } : {}),
+          ...copiedSize(node),
           ...(parentDuplicated
             ? { parentId: idMap.get(node.parentId!) }
             : parentAlive
@@ -719,7 +749,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
               }
             : { ...node.position },
           data: clonedData,
-          ...(node.style ? { style: JSON.parse(JSON.stringify(node.style)) } : {}),
+          ...copiedSize(node),
           ...(node.parentId && idMap.has(node.parentId)
             ? { parentId: idMap.get(node.parentId) }
             : {}),
@@ -753,7 +783,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
       const newId = generateNodeId()
       const offset = { x: 50, y: 50 }
 
-      // Deep clone the data; keep style (persisted size).
+      // Deep clone the data; keep the size (copiedSize — BOTH places it can live).
       // With no explicit position we paste next to the original, so a child
       // node keeps its parentId (positions are parent-relative). An explicit
       // position is absolute canvas coordinates, so the copy is unparented.
@@ -768,7 +798,7 @@ export function createFlowStore(): UseBoundStore<StoreApi<FlowState>> {
           y: clipboard.position.y + offset.y,
         },
         data: clonedData,
-        ...(clipboard.style ? { style: JSON.parse(JSON.stringify(clipboard.style)) } : {}),
+        ...copiedSize(clipboard),
         ...(!position && parentAlive ? { parentId: clipboard.parentId } : {}),
       }
 
