@@ -24,7 +24,9 @@ import { defineConfig } from 'tsup'
  * unaffected — Vite still resolves the import inside src/.
  */
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // Named entries: both files are called index.ts, so an array would collide in dist/.
+  // `locales` backs the ./locales subpath (strings only, no editor, no CSS).
+  entry: { index: 'src/index.ts', locales: 'src/locales/index.ts' },
   format: ['esm'],
   dts: true,
   sourcemap: true,
